@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+body {
+  background: #F5E0FF;
+}
+
+@theme inline {
+  --color-pink: #FE62C4;
+  --color-lavender: #F5E0FF;
+  --text-color-pink: #FE62C4;
+  --font-satoshi: "Satoshi", sans-serif;
+  --font-montserrat: "Montserrat", sans-serif;
+  --font-astrid: "Astrid";
+}
+
+
+@font-face {
+  font-family: "Satoshi";
+  src: url('/fonts/Satoshi-Variable.woff2') format("woff2");
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  src: url('/fonts/Montserrat-VariableFont_wght.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Astrid';
+  src: url('/fonts/Astrid.otf') format('opentype');
+}
