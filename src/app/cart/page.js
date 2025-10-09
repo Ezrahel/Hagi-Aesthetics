@@ -1,121 +1,99 @@
-import CTA from '@/components/CTA'
-import React from 'react'
-import CartItems from './components/CartItems'
-import Hero from './components/Hero'
+'use client'
+import Image from 'next/image'
 import Link from 'next/link'
+import React, { useEffect, useMemo, useState } from 'react'
+import CTA from '@/components/CTA'
+
 const page = () => {
+    const [items, setItems] = useState([])
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+        try {
+            const stored = JSON.parse(window.localStorage.getItem('cart') || '[]')
+            setItems(Array.isArray(stored) ? stored : [])
+        } catch { setItems([]) }
+    }, [])
+
+    const updateStorage = (next) => {
+        setItems(next)
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem('cart', JSON.stringify(next))
+            window.dispatchEvent(new Event('cart:update'))
+        }
+    }
+
+    const increase = (slug) => {
+        const next = items.map(i => i.slug === slug ? { ...i, qty: Math.min(99, (i.qty || 1) + 1) } : i)
+        updateStorage(next)
+    }
+    const decrease = (slug) => {
+        const next = items.map(i => i.slug === slug ? { ...i, qty: Math.max(1, (i.qty || 1) - 1) } : i)
+        updateStorage(next)
+    }
+    const remove = (slug) => {
+        const next = items.filter(i => i.slug !== slug)
+        updateStorage(next)
+    }
+
+    const subtotal = useMemo(() => items.reduce((sum, i) => sum + (i.price || 0) * (i.qty || 1), 0), [items])
+
     return (
-        <div className=''>
-            <Hero />
-            <CartItems />
-            <div className='w-full  flex flex-col gap-10 lg:gap-16 justify-center items-center py-10 lg:py-24'>
-                <div className='w-full justify-center flex gap-4  lg:gap-8 font-montserrat font-medium text-[12px] lg:text-[14px] text-pink pb-12 px-4 lg:px-0'>
-                    <Link href='/shop' className='w-full lg:w-[275px] h-[40px] lg:h-[56px]  border-2 border-pink rounded-full flex justify-center items-center'>Continue Shopping</Link>
-                    <Link href='/checkout' className='w-full lg:w-[275px] h-[40px] lg:h-[56px] text-lavender bg-pink border-2 border-pink rounded-full flex justify-center items-center'>Proceed to Checkout</Link>
+        <div className='px-5 lg:px-24 py-10 text-pink'>
+            <div className='text-center lg:text-left mb-6'>
+                <h3 className='font-astrid text-[28px] lg:text-[36px]'>Your Cart</h3>
+                <p className='font-satoshi text-[14px] lg:text-[16px]'>Review your items and proceed to checkout.</p>
+            </div>
+
+            <div className='grid grid-cols-1 lg:grid-cols-3 gap-8'>
+                <div className='lg:col-span-2'>
+                    {items.length === 0 ? (
+                        <p className='text-sm text-gray-600'>Your cart is empty.</p>
+                    ) : (
+                        <div className='space-y-4'>
+                            {items.map(i => (
+                                <div key={i.slug} className='flex items-center justify-between border-b border-[#00000020] py-3 gap-3'>
+                                    <div className='flex items-center gap-3'>
+                                        <Image src={i.image} alt={i.name} width={56} height={56} className='w-14 h-14 object-cover rounded' />
+                                        <div>
+                                            <p className='font-satoshi text-[14px]'>{i.name}</p>
+                                            <p className='text-xs text-gray-600'>${(i.price || 0).toFixed(2)}</p>
+                                        </div>
+                                    </div>
+                                    <div className='flex items-center gap-3'>
+                                        <button onClick={() => decrease(i.slug)} className='w-[28px] h-[28px] border border-pink rounded-full'>-</button>
+                                        <span className='w-8 text-center'>{i.qty || 1}</span>
+                                        <button onClick={() => increase(i.slug)} className='w-[28px] h-[28px] border border-pink rounded-full'>+</button>
+                                    </div>
+                                    <div className='font-satoshi font-semibold'>${(((i.price || 0) * (i.qty || 1))).toFixed(2)}</div>
+                                    <button onClick={() => remove(i.slug)} className='w-[28px] h-[28px] bg-black text-lavender rounded-full text-xs'>X</button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
-
-                <div className='w-full flex flex-col gap-12 lg:gap-0 lg:flex-row text-pink px-5 lg:px-24'>
-                    <div className='w-full flex flex-col gap-5 lg:gap-5 '>
-                        <h3 className='font-astrid text-[22px] lg:text-[24px]'>Coupon Code</h3>
-                        <input className='w-full lg:w-[400px] h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Enter your coupon code' />
-                        <button className='w-[150px] lg:w-[250px] h-[46px] lg:h-[52px] text-lavender bg-pink font-montserrat font-medium text-[14px] lg:text-[15px] rounded-full flex justify-center items-center cursor-pointer'>Apply Coupon</button>
+                <div className='border border-pink rounded-lg p-4 h-fit'>
+                    <h4 className='font-astrid text-[22px] mb-3'>Order Summary</h4>
+                    <div className='flex justify-between py-2 border-b border-[#00000020]'>
+                        <span className='font-satoshi text-[14px]'>Subtotal</span>
+                        <span className='font-satoshi font-bold'>${subtotal.toFixed(2)}</span>
                     </div>
-
-                    <div className='w-full flex flex-col gap-5 lg:gap-5 '>
-                        <h3 className='font-astrid text-[22px] lg:text-[24px]'>Calculate Shipping</h3>
-                        <div className='flex flex-col gap-2'>
-                            <label htmlFor='country' className='font-satoshi font-bold text-[14px]'>Country</label>
-                            <input id='country' className='w-full lg:w-[400px] h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Enter your Country' />
-                        </div>
-                        <div className='flex flex-col gap-2'>
-                            <label htmlFor='state' className='font-satoshi font-bold text-[14px]'>State / Province</label>
-                            <input id='state' className='w-full lg:w-[400px] h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Enter your State / Province' />
-                        </div>
-                        <div className='flex flex-col gap-2'>
-                            <label htmlFor='zipcode' className='font-satoshi font-bold text-[14px]'>Zip Code</label>
-                            <input id='zipcode' className='w-full lg:w-[400px] h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Enter your zip code' />
-                        </div>
+                    <div className='flex justify-between py-2 border-b border-[#00000020]'>
+                        <span className='font-satoshi text-[14px]'>Shipping</span>
+                        <span className='font-satoshi font-bold'>$4.99</span>
                     </div>
-
-                    <div className='w-full flex flex-col gap-5 lg:gap-10 '>
-                        <h3 className='font-astrid text-[22px] lg:text-[24px]'>Cart Total</h3>
-                        <div className='space-y-2 lg:space-y-4 font-satoshi font-bold text-[14px]'>
-                            <div className='w-full flex py-3 border-b border-[#00000050]'>
-                                <p className='w-[50%]'>Cart Subtotal</p>
-                                <p className='w-[50%]'>989.57</p>
-                            </div>
-                            <div className="w-full flex justify-evenly py-3 border-b border-[#00000050]">
-                                <p className="w-[50%]">Shipping and Handling</p>
-
-                                <div className="w-[50%] space-y-3 lg:space-y-4">
-                                    <label className="flex items-center gap-4 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            name="shipping"
-                                            value="flat"
-                                            className="hidden peer"
-                                        />
-                                        <div className="w-3 h-3 rounded-full border-2 border-pink peer-checked:bg-pink"></div>
-                                        <span>Flat Rate : $40</span>
-                                    </label>
-
-                                    <label className="flex items-center gap-4 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            name="shipping"
-                                            value="free"
-                                            className="hidden peer"
-                                        />
-                                        <div className="w-3 h-3 rounded-full border-2 border-pink peer-checked:bg-pink"></div>
-                                        <span>Free Shipping</span>
-                                    </label>
-
-                                    <label className="flex items-center gap-4 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            name="shipping"
-                                            value="international"
-                                            className="hidden peer"
-                                        />
-                                        <div className="w-3 h-3 rounded-full border-2 border-pink peer-checked:bg-pink"></div>
-                                        <span>International Shipping</span>
-                                    </label>
-
-                                    <label className="flex items-center gap-4 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            name="shipping"
-                                            value="local-delivery"
-                                            className="hidden peer"
-                                        />
-                                        <div className="w-3 h-3 rounded-full border-2 border-pink peer-checked:bg-pink"></div>
-                                        <span>Local Delivery: $40</span>
-                                    </label>
-
-                                    <label className="flex items-center gap-4 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            name="shipping"
-                                            value="pickup"
-                                            className="hidden peer"
-                                        />
-                                        <div className="w-3 h-3 rounded-full border-2 border-pink peer-checked:bg-pink"></div>
-                                        <span>Local Pickup</span>
-                                    </label>
-                                </div>
-                            </div>
-
-
-                            <div className='w-full flex justify-evenly py-3 border-b border-[#00000050]'>
-                                <p className='w-[50%]'>Order Total</p>
-                                <p className='w-[50%]'>1989.57</p>
-                            </div>
-                        </div>
+                    <div className='flex justify-between py-3'>
+                        <span className='font-satoshi text-[14px]'>Estimated Total</span>
+                        <span className='font-satoshi font-bold'>${(subtotal + 4.99).toFixed(2)}</span>
                     </div>
+                    <Link href='/checkout' className='w-full block text-center bg-pink text-lavender rounded-full py-3 mt-2'>Proceed to Pay</Link>
                 </div>
             </div>
-            <CTA />
+
+            <div className='mt-10'>
+                <CTA />
+            </div>
         </div>
     )
 }

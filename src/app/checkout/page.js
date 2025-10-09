@@ -1,171 +1,255 @@
+'use client'
 import CTA from '@/components/CTA'
 import Image from 'next/image'
 import Link from 'next/link'
-import React from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import { supabase } from '@/lib/supabaseClient'
+
+const PAYPAL_CLIENT_ID = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID
 
 const page = () => {
+    const [sdkReady, setSdkReady] = useState(false)
+    const [processing, setProcessing] = useState(false)
+    const [success, setSuccess] = useState(null)
+    const [error, setError] = useState('')
+
+    const [user, setUser] = useState(null)
+    const [availableCoupons, setAvailableCoupons] = useState([])
+    const [couponCode, setCouponCode] = useState('')
+    const [appliedCoupon, setAppliedCoupon] = useState(null)
+
+    const [items, setItems] = useState([])
+
+    // Load cart from localStorage
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+        try {
+            const stored = JSON.parse(window.localStorage.getItem('cart') || '[]')
+            setItems(Array.isArray(stored) ? stored : [])
+        } catch {
+            setItems([])
+        }
+    }, [])
+
+    const subtotal = useMemo(() => items.reduce((sum, i) => sum + (i.price || 0) * (i.qty || 1), 0), [items])
+    const shipping = 4.99
+
+    // Per-item $5 discount when coupon applied
+    const perItemDiscount = useMemo(() => {
+        if (!appliedCoupon) return 0
+        const count = items.reduce((n, i) => n + (i.qty || 1), 0)
+        const discount = 5 * count
+        return Math.min(discount, subtotal)
+    }, [appliedCoupon, items, subtotal])
+
+    const total = useMemo(() => {
+        const t = subtotal - perItemDiscount + shipping
+        return (t < 0 ? 0 : t).toFixed(2)
+    }, [subtotal, perItemDiscount])
+
+    useEffect(() => {
+        const load = async () => {
+            const { data } = await supabase.auth.getUser()
+            const u = data?.user ?? null
+            setUser(u)
+            const meta = u?.user_metadata || {}
+            const coupons = Array.isArray(meta.coupons) ? meta.coupons : []
+            setAvailableCoupons(coupons.filter(c => !c.used))
+        }
+        load()
+        const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
+            const u = session?.user ?? null
+            setUser(u)
+            const meta = u?.user_metadata || {}
+            const coupons = Array.isArray(meta.coupons) ? meta.coupons : []
+            setAvailableCoupons(coupons.filter(c => !c.used))
+        })
+        return () => { sub.subscription.unsubscribe() }
+    }, [])
+
+    const applyCoupon = () => {
+        setError('')
+        if (!couponCode) return
+        const c = availableCoupons.find(c => c.code.trim().toUpperCase() === couponCode.trim().toUpperCase())
+        if (!c) {
+            setError('Invalid or already used coupon code.')
+            setAppliedCoupon(null)
+            return
+        }
+        // Force to per-item $5 usage
+        setAppliedCoupon({ ...c, type: 'per_item', amountPerItem: 5 })
+    }
+
+    useEffect(() => {
+        if (!PAYPAL_CLIENT_ID) return
+        if (document.getElementById('paypal-sdk')) {
+            setSdkReady(true)
+            return
+        }
+        const script = document.createElement('script')
+        script.id = 'paypal-sdk'
+        script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&currency=USD&intent=capture`
+        script.async = true
+        script.onload = () => setSdkReady(true)
+        document.body.appendChild(script)
+    }, [])
+
+    useEffect(() => {
+        if (!sdkReady) return
+        if (!(window).paypal) return
+        setError('')
+        ;(window).paypal.Buttons({
+            style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'paypal' },
+            createOrder: (_data, actions) => {
+                return actions.order.create({
+                    purchase_units: [
+                        {
+                            amount: {
+                                currency_code: 'USD',
+                                value: total,
+                                breakdown: {
+                                    item_total: { currency_code: 'USD', value: subtotal.toFixed(2) },
+                                    shipping: { currency_code: 'USD', value: shipping.toFixed(2) },
+                                    discount: { currency_code: 'USD', value: perItemDiscount.toFixed(2) },
+                                }
+                            },
+                            items: items.map(i => ({
+                                name: i.name,
+                                quantity: String(i.qty || 1),
+                                unit_amount: { currency_code: 'USD', value: (i.price || 0).toFixed(2) }
+                            }))
+                        }
+                    ]
+                })
+            },
+            onApprove: async (_data, actions) => {
+                setProcessing(true)
+                try {
+                    const details = await actions.order.capture()
+                    setSuccess({ id: details.id, status: details.status })
+                    // Mark coupon as used once an order succeeds
+                    if (appliedCoupon && user) {
+                        try {
+                            const meta = user.user_metadata || {}
+                            const coupons = Array.isArray(meta.coupons) ? meta.coupons : []
+                            const updated = coupons.map(c => c.code === appliedCoupon.code ? { ...c, used: true, usedAt: new Date().toISOString() } : c)
+                            await supabase.auth.updateUser({ data: { coupons: updated } })
+                            setAvailableCoupons(updated.filter(c => !c.used))
+                        } catch (e) {
+                            console.error('Failed to mark coupon used', e)
+                        }
+                    }
+                    // Create order record
+                    try {
+                        await fetch('/api/orders', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                paypalOrderId: details.id,
+                                status: details.status,
+                                items,
+                                subtotal,
+                                shipping,
+                                discount: perItemDiscount,
+                                total: Number(total),
+                                couponCode: appliedCoupon?.code || null,
+                                customerEmail: null,
+                                customerName: null,
+                                paypalCapture: details,
+                            })
+                        })
+                    } catch (e) {
+                        console.error('Failed to record order', e)
+                    }
+                } catch (e) {
+                    setError('Payment capture failed. Please try again.')
+                } finally {
+                    setProcessing(false)
+                }
+            },
+            onError: (err) => {
+                console.error(err)
+                setError('Payment failed to initialize. Please try again.')
+            },
+            onCancel: () => {
+                setError('Payment was canceled.')
+            }
+        }).render('#paypal-checkout-container')
+        return () => {
+            const c = document.getElementById('paypal-checkout-container')
+            if (c) c.innerHTML = ''
+        }
+    }, [sdkReady, subtotal, shipping, total, perItemDiscount, items, appliedCoupon, user])
+
     return (
-        <div>
-            <div className='w-full h-[70dvh]  relative text-pink px-5 lg:px-24 '>
-                <Image
-                    src="/bgs/checkout1.webp"
-                    alt="checkout"
-                    width={2600}
-                    height={1600}
-                    className='absolute left-0 top-0 w-full h-full object-fill'
-                />
-                <div className='text-pink w-full h-full flex justify-center items-center gap-5 text-center flex-col   relative z-10'>
-                    <h1 className='font-astrid text-[50px] lg:text-[90px] leading-12 lg:leading-24'> Checkout</h1>
-                </div>
-            </div>
-            <div className='w-full h-[30dvh] text-center flex flex-col gap-2 justify-center items-center text-pink px-5 lg:px-24 '>
-                <h3 className='font-astrid text-[28px] lg:text-[36px]'>Your Shopping Cart</h3>
-                <p className='w-full lg:w-[500px] font-satoshi text-[15px] lg:text-[16px]'>Securely complete your order below.</p>
-            </div>
+        <div className='pt-20'>
+            <div className='w-full flex flex-col lg:flex-row justify-between py-14 px-8 lg:px-24 gap-10'>
+                <div className='w-full lg:w-[60%]'>
+                    <h2 className='font-astrid text-[22px] lg:text-[24px] mb-4'>Apply Coupon</h2>
+                    <div className='flex gap-3 items-center'>
+                        <input value={couponCode} onChange={(e) => setCouponCode(e.target.value)} placeholder='Enter coupon code' className='w-full lg:w-[400px] h-[52px] border border-[#00000050] font-satoshi italic text-[14px] px-4 outline-none' />
+                        <button onClick={applyCoupon} className='px-5 py-3 bg-pink text-lavender rounded font-satoshi'>Apply</button>
+                    </div>
+                    {appliedCoupon && (
+                        <p className='mt-2 text-sm text-green-700'>Applied coupon {appliedCoupon.code}: $5 off per item.</p>
+                    )}
+                    {error && (
+                        <p className='mt-2 text-sm text-red-600'>{error}</p>
+                    )}
 
-            <div className='text-pink'>
-                <div className=' w-full h-[75px] lg:h-[100px] flex items-center bg-pink text-lavender font-astrid text-[26px] lg:text-[32px] px-5 lg:px-32'>
-                    Customer Information
-                </div>
-                <div className='w-full grid grid-cols-1 lg:grid-cols-2 gap-x-10 lg:gap-x-20 gap-y-3 lg:gap-y-5  px-5 lg:px-32 pt-6 lg:pt-8 pb-10 lg:pb-16'>
-                    <div className='w-full flex flex-col gap-2'>
-                        <label htmlFor='email' className='font-satoshi font-bold text-[14px]'>Email Address</label>
-                        <input id='email' className='w-full h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Input Email Address' />
-                    </div>
-                    <div className='w-full flex flex-col gap-2'>
-                        <label htmlFor='confirmemail' className='font-satoshi font-bold text-[14px]'>Confirm Email Address</label>
-                        <input id='confirmemail' className='w-full h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Confirm your email address' />
-                    </div>
-                </div>
-
-                <div className=' w-full h-[75px] lg:h-[100px] flex items-center bg-pink text-lavender font-astrid text-[26px] lg:text-[32px] px-5 lg:px-32'>
-                    Shipping Address
-                </div>
-                <div className='w-full grid grid-cols-1 lg:grid-cols-2 gap-x-10 lg:gap-x-20 gap-y-3 lg:gap-y-5  px-5 lg:px-32 pt-6 lg:pt-8 pb-10 lg:pb-16'>
-                    <div className='w-full flex flex-col gap-2'>
-                        <label htmlFor='firstname' className='font-satoshi font-bold text-[14px]'>First Name</label>
-                        <input id='firstname' className='w-full h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Enter Your First Name' />
-                    </div>
-                    <div className='w-full flex flex-col gap-2'>
-                        <label htmlFor='lastname' className='font-satoshi font-bold text-[14px]'>Last Name</label>
-                        <input id='lastname' className='w-full h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Enter Your Last Name' />
-                    </div>
-                    <div className='w-full flex flex-col gap-2'>
-                        <label htmlFor='number' className='font-satoshi font-bold text-[14px]'>Phone Number</label>
-                        <input id='number' className='w-full h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Enter Your Phone Number' />
-                    </div>
-                    <div className='w-full flex flex-col gap-2'>
-                        <label htmlFor='email' className='font-satoshi font-bold text-[14px]'>Email Address</label>
-                        <input id='email' className='w-full h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Input Email Address' />
-                    </div>
-                    <div className='w-full flex flex-col gap-2'>
-                        <label htmlFor='address1' className='font-satoshi font-bold text-[14px]'>Address 1</label>
-                        <input id='address1' className='w-full h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Enter Your Address' />
-                    </div>
-                    <div className='w-full flex flex-col gap-2'>
-                        <label htmlFor='address2' className='font-satoshi font-bold text-[14px]'>Address 2</label>
-                        <input id='address2' className='w-full h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Enter Your Address' />
-                    </div>
-                    <div className='w-full flex flex-col gap-2'>
-                        <label htmlFor='city' className='font-satoshi font-bold text-[14px]'>City</label>
-                        <input id='city' className='w-full h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Enter Your City' />
-                    </div>
-                    <div className='w-full flex flex-col gap-2'>
-                        <label htmlFor='state' className='font-satoshi font-bold text-[14px]'>State / Province / Region</label>
-                        <input id='state' className='w-full h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Enter Your State / Province / Region' />
-                    </div>
-                    <div className='w-full flex flex-col gap-2'>
-                        <label htmlFor='zip' className='font-satoshi font-bold text-[14px]'>ZIP / Postal Code</label>
-                        <input id='zip' className='w-full h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Enter Your ZIP / Postal Code' />
-                    </div>
-
-                    <div className='w-full flex flex-col gap-2'>
-                        <label htmlFor='country' className='font-satoshi font-bold text-[14px]'>Country</label>
-                        <input id='country' className='w-full h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Enter Your Country' />
+                    <div className='mt-8'>
+                        <h3 className='font-astrid text-[22px] lg:text-[24px] mb-3'>Cart</h3>
+                        <div className='space-y-2'>
+                            {items.length === 0 && (
+                                <p className='text-sm text-gray-600'>Your cart is empty.</p>
+                            )}
+                            {items.map((i) => (
+                                <div key={i.slug} className='flex justify-between items-center border-b border-[#00000020] py-3'>
+                                    <div className='flex items-center gap-3'>
+                                        <Image src={i.image} alt={i.name} width={56} height={56} className='w-14 h-14 object-cover rounded' />
+                                        <div>
+                                            <p className='font-satoshi text-[14px]'>{i.name}</p>
+                                            <p className='text-xs text-gray-600'>${(i.price || 0).toFixed(2)} × {i.qty || 1}</p>
+                                        </div>
+                                    </div>
+                                    <div className='font-satoshi font-semibold'>${(((i.price || 0) * (i.qty || 1))).toFixed(2)}</div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
 
-                <div className=' w-full h-[75px] lg:h-[100px] flex items-center bg-pink text-lavender font-astrid text-[26px] lg:text-[32px] px-5 lg:px-32'>
-                    Shipping Method
-                </div>
-                <div className="w-full flex flex-col lg:flex-row gap-8 lg:gap-52 px-5 lg:px-32 pt-6 lg:pt-8 pb-10 lg:pb-16">
-                    <h3 className="font-satoshi font-bold text-[14px]">
-                        Choose Shipping Method
-                    </h3>
-
-                    <div className="space-y-5 lg:space-y-6">
-                        <label className="flex items-center gap-4 cursor-pointer">
-                            <input
-                                type="radio"
-                                name="shippingMethod"
-                                value="free"
-                                className="hidden peer"
-                            />
-                            <div className="w-3 h-3 rounded-full border-2 border-pink peer-checked:bg-pink"></div>
-                            <p className="font-satoshi text-[15px] lg:text-[16px]">
-                                Free shipping on orders over $25!
-                            </p>
-                        </label>
-
-                        <label className="flex items-center gap-4 cursor-pointer">
-                            <input
-                                type="radio"
-                                name="shippingMethod"
-                                value="express"
-                                className="hidden peer"
-                            />
-                            <div className="w-3 h-3 rounded-full border-2 border-pink peer-checked:bg-pink"></div>
-                            <p className="font-satoshi text-[15px] lg:text-[16px]">
-                                Express Shipping (1-2 business days) — $9.99
-                            </p>
-                        </label>
-
-                        <label className="flex items-center gap-4 cursor-pointer">
-                            <input
-                                type="radio"
-                                name="shippingMethod"
-                                value="standard"
-                                className="hidden peer"
-                            />
-                            <div className="w-3 h-3 rounded-full border-2 border-pink peer-checked:bg-pink"></div>
-                            <p className="font-satoshi text-[15px] lg:text-[16px]">
-                                Standard Shipping (3-5 business days) — $4.99
-                            </p>
-                        </label>
-                    </div>
-                </div>
-
-
-                <div className=' w-full h-[75px] lg:h-[100px] flex items-center bg-pink text-lavender font-astrid text-[26px] lg:text-[32px] px-5 lg:px-32'>
-                    Card Information
-                </div>
-                <div className='w-full grid grid-cols-1 lg:grid-cols-2 gap-x-10 lg:gap-x-20 gap-y-3 lg:gap-y-5  px-5 lg:px-32 pt-6 lg:pt-8 pb-10 lg:pb-16'>
-                    <div className='w-full flex flex-col gap-2'>
-                        <label htmlFor='cardholdername' className='font-satoshi font-bold text-[14px]'>Cardholder Name</label>
-                        <input id='cardholdername' className='w-full h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Enter Cardholder Name' />
-                    </div>
-                    <div className='w-full flex flex-col gap-2'>
-                        <label htmlFor='cardnumber' className='font-satoshi font-bold text-[14px]'>Card Number</label>
-                        <input id='cardnumber' className='w-full h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Enter Card Number' />
-                    </div>
-                    <div className='w-full flex flex-col gap-2'>
-                        <label htmlFor='expirationdate' className='font-satoshi font-bold text-[14px]'>Expiration Date</label>
-                        <input id='expirationdate' className='w-full h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Enter Expiration Date' />
-                    </div>
-                    <div className='w-full flex flex-col gap-2'>
-                        <label htmlFor='cvv' className='font-satoshi font-bold text-[14px]'>CVV</label>
-                        <input id='cvv' className='w-full h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Enter CVV' />
-                    </div>
-                    <div className='w-full flex flex-col gap-2'>
-                        <label htmlFor='address1' className='font-satoshi font-bold text-[14px]'>Billing Address (if different)</label>
-                        <input id='address1' className='w-full h-[52px] border border-[#00000050] font-satoshi italic text-[14px]  px-4 outline-none' placeholder='Enter Address' />
+                <div className='w-full lg:w-[40%]'>
+                    <h2 className='font-astrid text-[22px] lg:text-[24px] mb-4'>Order Summary</h2>
+                    <div className='space-y-2 lg:space-y-4 font-satoshi font-bold text-[14px]'>
+                        <div className='w-full flex py-3 border-b border-[#00000050]'>
+                            <p className='w-[50%]'>Cart Subtotal</p>
+                            <p className='w-[50%]'>${subtotal.toFixed(2)}</p>
+                        </div>
+                        <div className='w-full flex py-3 border-b border-[#00000050]'>
+                            <p className='w-[50%]'>Discount</p>
+                            <p className='w-[50%]'>-${perItemDiscount.toFixed(2)}</p>
+                        </div>
+                        <div className='w-full flex py-3 border-b border-[#00000050]'>
+                            <p className='w-[50%]'>Shipping</p>
+                            <p className='w-[50%]'>${shipping.toFixed(2)}</p>
+                        </div>
+                        <div className='w-full flex justify-evenly py-3 border-b border-[#00000050]'>
+                            <p className='w-[50%]'>Order Total</p>
+                            <p className='w-[50%]'>${total}</p>
+                        </div>
                     </div>
 
-                </div>
-
-                <div className='w-full justify-center flex gap-4  lg:gap-8 font-montserrat font-medium text-[13px] lg:text-[14px] text-pink pb-12 px-4 lg:px-0'>
-                    <Link href='/cart' className='w-full lg:w-[275px] h-[40px] lg:h-[56px]  border-2 border-pink rounded-full flex justify-center items-center '>Return to Cart</Link>
-                    <Link href='/' className='w-full lg:w-[275px] h-[40px] lg:h-[56px] text-lavender bg-pink border-2 border-pink rounded-full flex justify-center items-center '>Complete Purchase</Link>
+                    <div id='paypal-checkout-container' className='mt-6'></div>
+                    
+                    <div className='mt-6'>
+                        <button 
+                            onClick={() => window.location.href = `/api/paypal/create?amount=${total}`}
+                            className='w-full bg-pink text-lavender rounded-full py-3 font-montserrat font-bold text-[16px] uppercase hover:bg-pink/90 transition-colors'
+                        >
+                            Pay with PayPal
+                        </button>
+                    </div>
                 </div>
             </div>
             <CTA />

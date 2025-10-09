@@ -28,3 +28,6 @@ body {
   font-family: 'Astrid';
   src: url('/fonts/Astrid.otf') format('opentype');
 }
+
+/* Interactions */
+a:hover, button:hover { cursor: pointer; }

@@ -24,6 +24,7 @@ const Footer = () => {
                         <Image src="/logo.png" alt="logo" width={100} height={100} className='w-[45px] lg:w-[85px] h-auto' />
                         <h3 className='font-astrid text-[28px] lg:text-[36px]'>Hagi Aesthetics</h3>
                         <p className='font-satoshi font-light italic text-[16px] lg:text-[20px]'>Skincare that feels like poetry</p>
+                        <p className='font-satoshi font-light italic text-[16px] lg:text-[20px]'>support@hagiaesthetics.com</p>
                     </div>
                     <div className='w-full lg:w-auto flex flex-row  gap-4 lg:gap-36 order-2 lg:order-none'>
                         <div className='w-1/2 lg:w-auto flex flex-col font-satoshi text-[14px] lg:text-[18px] text-pink uppercase'>

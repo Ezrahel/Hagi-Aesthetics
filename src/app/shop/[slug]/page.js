@@ -1,16 +1,62 @@
+'use client'
 import Image from 'next/image';
-import React from 'react'
+import React, { use as usePromise, useEffect, useMemo, useState } from 'react'
 import { productData } from '@/utils';
 import Banner from '@/components/Banner';
 import CTA from '@/components/CTA';
 
-export default async function ProductPage({ params }) {
-    const { slug } = await params;
+export default function ProductPage({ params }) {
+    const { slug } = usePromise(params);
 
     const product = productData[slug];
 
+    const [qty, setQty] = useState(1)
+    useEffect(() => {
+        try {
+            const sp = new URLSearchParams(window.location.search)
+            const q = Math.max(1, Math.min(99, Number(sp.get('qty') || 1)))
+            setQty(q)
+        } catch {}
+    }, [])
+
+    const price = product?.price ?? 0
+    const total = useMemo(() => (qty * price).toFixed(2), [qty, price])
+
     if (!product) {
         return <div className="p-10">Product not found</div>
+    }
+
+    const decrease = () => setQty(q => Math.max(1, q - 1))
+    const increase = () => setQty(q => Math.min(99, q + 1))
+
+    const addToCart = () => {
+        try {
+            if (typeof window === 'undefined') return
+            const key = 'cart'
+            const prev = JSON.parse(window.localStorage.getItem(key) || '[]')
+            const existingIndex = prev.findIndex((i) => i.slug === slug)
+            if (existingIndex >= 0) {
+                const updated = [...prev]
+                updated[existingIndex].qty = Math.min(99, (updated[existingIndex].qty || 1) + qty)
+                window.localStorage.setItem(key, JSON.stringify(updated))
+            } else {
+                const item = { slug, name: product.name, price, qty, image: product.image }
+                window.localStorage.setItem(key, JSON.stringify([...(prev || []), item]))
+            }
+            window.dispatchEvent(new Event('cart:update'))
+            alert('Added to cart')
+        } catch (e) {
+            console.error('Add to cart failed', e)
+        }
+    }
+
+    const buyNow = async () => {
+        try {
+            window.location.href = `/api/paypal/create?amount=${encodeURIComponent(total)}`
+        } catch (e) {
+            console.error(e)
+            alert('Failed to initialize PayPal checkout. Please try again.')
+        }
     }
 
     return (
@@ -41,15 +87,16 @@ export default async function ProductPage({ params }) {
                     <p className='font-satoshi text-[16px] lg:text-[20px]'>{product.description}</p>
                     <div>
                         <p className='mb-2 font-montserrat font-bold text-[12px]'>Select Quantity</p>
-                        <div className='flex  items-center gap-6 lg:gap-10'>
-                            <div className="w-[40px] lg:w-[56px] h-[40px] lg:h-[56px] border-2 border-pink rounded-tl-full rounded-bl-full flex justify-center items-center text-center font-montserrat font-medium text-[20px] text-black">-</div>
-                            <div className='text-black font-montserrat font-medium text-[20px]'>1</div>
-                            <div className="w-[40px] lg:w-[56px] h-[40px] lg:h-[56px] border-2 border-pink rounded-tr-full rounded-br-full flex justify-center items-center text-center font-montserrat font-medium text-[20px] text-black">+</div>
+                        <div className='flex items-center gap-6 lg:gap-10'>
+                            <button onClick={decrease} className="w-[40px] lg:w-[56px] h-[40px] lg:h-[56px] border-2 border-pink rounded-tl-full rounded-bl-full flex justify-center items-center text-center font-montserrat font-medium text-[20px] text-black">-</button>
+                            <div className='text-black font-montserrat font-medium text-[20px]'>{qty}</div>
+                            <button onClick={increase} className="w-[40px] lg:w-[56px] h-[40px] lg:h-[56px] border-2 border-pink rounded-tr-full rounded-br-full flex justify-center items-center text-center font-montserrat font-medium text-[20px] text-black">+</button>
                         </div>
+                        <div className='mt-3 font-montserrat font-semibold text-[18px]'>Price: ${price.toFixed(2)} · Total: ${total}</div>
                     </div>
                     <div className='mt-2 flex gap-4 lg:gap-8 font-montserrat font-medium text-[14px] lg:text-[17px]'>
-                        <div className='w-full lg:w-[225px] h-[44px] lg:h-[56px]  border-2 border-pink rounded-full flex justify-center items-center uppercase'>Add to cart</div>
-                        <div className='w-full lg:w-[225px] h-[44px] lg:h-[56px] text-lavender bg-pink border-2 border-pink rounded-full flex justify-center items-center uppercase'>Buy now</div>
+                        <button onClick={addToCart} className='w-full lg:w-[225px] h-[44px] lg:h-[56px] border-2 border-pink rounded-full flex justify-center items-center uppercase'>Add to cart</button>
+                        <button onClick={buyNow} className='w-full lg:w-[225px] h-[44px] lg:h-[56px] text-lavender bg-pink border-2 border-pink rounded-full flex justify-center items-center uppercase'>Buy now</button>
                     </div>
                 </div>
             </div>
@@ -58,7 +105,7 @@ export default async function ProductPage({ params }) {
                 <Banner />
             </div>
 
-            <div className='w-full lg:h-screen flex  justify-evenly items-center py-10 lg:py-0'>
+            <div className='w-full lg:h-screen flex justify-evenly items-center py-10 lg:py-0'>
                 <Image src={product.image} alt="logo" width={1800} height={1800} className='w-[50%] lg:w-[500px] h-auto' />
                 <Image src={product.image} alt="logo" width={1800} height={1800} className='w-[50%] lg:w-[500px] h-auto' />
             </div>
@@ -68,64 +115,24 @@ export default async function ProductPage({ params }) {
                 <h3 className='w-full lg:w-[500px] font-astrid text-[36px] lg:text-[56px] leading-8 lg:leading-14'>{product.productdetails}</h3>
                 <p className='font-satoshi text-[16px] lg:text-[20px]'>{product.description2}</p>
                 <div className='grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-5'>
-                    <div className='w-full h-[100px] lg:h-[125px] flex flex-col lg:gap-1 justify-center px-4 lg:px-10  rounded-[16px] lg:rounded-[20px] border-2 border-pink'>
+                    <div className='w-full h-[100px] lg:h-[125px] flex flex-col lg:gap-1 justify-center px-4 lg:px-10 rounded-[16px] lg:rounded-[20px] border-2 border-pink'>
                         <h3 className='font-satoshi font-black text-[14px] lg:text-[16px] uppercase'>Texture</h3>
                         <p className='font-satoshi text-[14px] lg:text-[16px]'>Rich & creamy</p>
                     </div>
-                    <div className='w-full h-[100px] lg:h-[125px] flex flex-col lg:gap-1 justify-center px-4 lg:px-10  rounded-[16px] lg:rounded-[20px] border-2 border-pink'>
+                    <div className='w-full h-[100px] lg:h-[125px] flex flex-col lg:gap-1 justify-center px-4 lg:px-10 rounded-[16px] lg:rounded-[20px] border-2 border-pink'>
                         <h3 className='font-satoshi font-black text-[14px] lg:text-[16px] uppercase'>Scent Profile</h3>
                         <p className='font-satoshi text-[14px] lg:text-[16px]'>Calming lavender with a hint of warm vanilla</p>
                     </div>
-                    <div className='w-full h-[100px] lg:h-[125px] flex flex-col lg:gap-1 justify-center px-4 lg:px-10  rounded-[16px] lg:rounded-[20px] border-2 border-pink'>
+                    <div className='w-full h-[100px] lg:h-[125px] flex flex-col lg:gap-1 justify-center px-4 lg:px-10 rounded-[16px] lg:rounded-[20px] border-2 border-pink'>
                         <h3 className='font-satoshi font-black text-[14px] lg:text-[16px] uppercase'>Packaging</h3>
                         <p className='font-satoshi text-[14px] lg:text-[16px]'>Sleek, minimal jar with secure lid</p>
                     </div>
-                    <div className='w-full h-[100px] lg:h-[125px] flex flex-col lg:gap-1 justify-center px-4 lg:px-10  rounded-[16px] lg:rounded-[20px] border-2 border-pink'>
+                    <div className='w-full h-[100px] lg:h-[125px] flex flex-col lg:gap-1 justify-center px-4 lg:px-10 rounded-[16px] lg:rounded-[20px] border-2 border-pink'>
                         <h3 className='font-satoshi font-black text-[14px] lg:text-[16px] uppercase'>Ideal for</h3>
                         <p className='font-satoshi text-[14px] lg:text-[16px]'>Dry, sensitive, or dull skin</p>
                     </div>
                 </div>
             </div>
-
-            {slug !== "vietnamese-hair-vendor-list" && (
-                <div className='w-full text-pink space-y-[40px] lg:space-y-[60px] pt-[50px] lg:pt-[100px] pb-[75px] lg:pb-[150px]'>
-                    <div className='text-center space-y-[6px] lg:space-y-[10px]'>
-                        <p className='font-montserrat font-bold text-[12px] uppercase'>Our values</p>
-                        <h3 className='font-astrid text-[46px] lg:text-[84px] leading-12 lg:leading-20'>What’s Inside</h3>
-                    </div>
-                    <div className='flex justify-start lg:justify-center items-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden'>
-                        <div className='flex-shrink-0 relative left-8 w-[225px] lg:w-[350px] h-[225px] lg:h-[350px] flex flex-col justify-center items-center rounded-[24px] text-center border-2 border-pink px-5 lg:px-[52px] z-0'>
-                            <h3 className='font-astrid text-[50px] lg:text-[90px] leading-12 lg:leading-24'>✨</h3>
-                            <h3 className='font-astrid text-[32px] lg:text-[40px] leading-10 lg:leading-12'>Shea Butter</h3>
-                            <p className='font-satoshi text-[16px] lg:text-[20px]'>
-                                Deep hydration & skin repair
-                            </p>
-                        </div>
-                        <div className='flex-shrink-0 relative left-3 w-[225px] lg:w-[350px] h-[225px] lg:h-[350px] flex flex-col justify-center items-center rounded-[24px] text-center bg-pink text-lavender border-2 border-pink px-5 lg:px-[52px] z-10'>
-                            <h3 className='font-astrid text-[50px] lg:text-[90px] leading-12 lg:leading-24'>🌿</h3>
-                            <h3 className='font-astrid text-[32px] lg:text-[40px] leading-10 lg:leading-12'>Aloe Vera</h3>
-                            <p className='font-satoshi text-[16px] lg:text-[20px]'>
-                                Fights ittitation
-                            </p>
-                        </div>
-                        <div className='flex-shrink-0 relative right-3 w-[225px] lg:w-[350px] h-[225px] lg:h-[350px] flex flex-col justify-center items-center rounded-[24px] text-center border-2 border-pink px-5 lg:px-[52px] z-20'>
-                            <h3 className='font-astrid text-[50px] lg:text-[90px] leading-12 lg:leading-24'>💧</h3>
-                            <h3 className='font-astrid text-[32px] lg:text-[40px] leading-10 lg:leading-12'>Vitamin E</h3>
-                            <p className='font-satoshi text-[16px] lg:text-[20px]'>
-                                Fights dryness & nourishes
-                            </p>
-                        </div>
-                        <div className='flex-shrink-0 relative right-8 w-[225px] lg:w-[350px] h-[225px] lg:h-[350px] flex flex-col justify-center items-center rounded-[24px] text-center bg-pink text-lavender border-2 border-pink px-5 lg:px-[52px] z-30'>
-                            <h3 className='font-astrid text-[50px] lg:text-[90px] leading-12 lg:leading-24'>🌼</h3>
-                            <h3 className='font-astrid text-[32px] lg:text-[40px] leading-10 lg:leading-12'>Essential Oils</h3>
-                            <p className='font-satoshi text-[16px] lg:text-[20px]'>
-                                Adds natural fragrance and glow
-                            </p>
-                        </div>
-
-                    </div>
-                </div>
-            )}
 
             <CTA />
         </div>

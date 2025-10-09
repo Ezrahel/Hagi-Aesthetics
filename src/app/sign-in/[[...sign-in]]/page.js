@@ -1,33 +1,57 @@
-import { SignIn } from "@clerk/nextjs";
-
-const appearance = {
-  layout: {
-    socialButtonsPlacement: "bottom",
-    socialButtonsVariant: "iconButton",
-    privacyPageUrl: "",
-    termsPageUrl: ""
-  },
-  elements: {
-    footer: "hidden",
-    footerAction: "hidden",
-    dividerRow: "hidden",
-    formButtonPrimary: "bg-pink hover:bg-pink/90",
-    card: "shadow-none",
-    headerSubtitle: "hidden",
-    socialButtons: "hidden",
-    dividerLine: "hidden",
-    formField: "gap-1",
-    formFieldInput: "rounded-none border-pink focus:border-pink",
-    formButtonPrimary: "bg-pink hover:bg-pink/90 text-white rounded-none",
-  },
-};
+'use client'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabaseClient'
+import Image from 'next/image'
+import Link from 'next/link'
 
 export default function Page() {
+  const router = useRouter()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const onSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    setLoading(false)
+    if (error) {
+      setError(error.message)
+      return
+    }
+    router.push('/')
+  }
+
+  const signInWithGoogle = async () => {
+    setError('')
+    const { data, error } = await supabase.auth.signInWithOAuth({ 
+      provider: 'google',
+      options: {
+        redirectTo: 'https://wojkfyosficrfjaxhlyn.supabase.co/auth/v1/callback'
+      }
+    })
+    if (error) setError(error.message)
+  }
+
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <SignIn 
-        appearance={appearance}
-      />
+    <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="w-full max-w-md bg-white p-6 rounded-lg shadow-xl border border-gray-100">
+        <h1 className="text-xl font-bold mb-4">Sign In</h1>
+        {/* <button onClick={signInWithGoogle} className="w-full border py-2 rounded mb-4 flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors">
+          <Image src="/icons/google.svg" alt="Google" width={18} height={18} />
+          Continue with Google
+        </button> */}
+        <form onSubmit={onSubmit} className="space-y-4">
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="w-full border rounded px-3 py-2 focus:ring-1 focus:ring-pink focus:border-pink transition" required />
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="w-full border rounded px-3 py-2 focus:ring-1 focus:ring-pink focus:border-pink transition" required />
+          {error && <p className="text-red-600 text-sm">{error}</p>}
+          <button type="submit" disabled={loading} className="w-full bg-pink text-white py-2 rounded hover:bg-pink/90 transition-colors disabled:opacity-60">{loading ? 'Signing in...' : 'Sign In'}</button>
+        </form>
+        <p className="mt-4 text-sm text-gray-600">Don't have an account? <Link href="/sign-up" className="text-pink hover:text-pink/80">Sign up</Link></p>
+      </div>
     </div>
   );
 }

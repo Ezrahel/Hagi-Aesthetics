@@ -1,31 +1,10 @@
-export const clerkAppearance = {
-  variables: {
-    colorPrimary: "#ff69b4",
-    colorBackground: "#ffffff",
-    fontFamily: "Montserrat, sans-serif",
-  },
-  layout: {
-    socialButtonsPlacement: "bottom",
-    socialButtonsVariant: "iconButton",
-    privacyPageUrl: "",
-    termsPageUrl: "",
-    showOptionalFields: false,
-    helpPageUrl: "",
-  },
-  elements: {
-    card: "shadow-none",
-    headerTitle: null,
-    headerSubtitle: null,
-    socialButtons: null,
-    dividerLine: null,
-    footer: null,
-    footerAction: null,
-    formButtonPrimary: "bg-pink hover:bg-pink/90 text-white",
-    formFieldInput: "rounded-none border-pink focus:border-pink",
-    formField: "gap-1",
-    badge: null,
-    navbarButton: null,
-    identityPreview: null,
-    formFieldLabel: "text-black",
-  },
+export const clerkAppearance = {}
+
+// Error boundary component for Clerk
+export const ClerkErrorBoundary = ({ children }) => {
+  return (
+    <div className="clerk-error-boundary">
+      {children}
+    </div>
+  );
 };
