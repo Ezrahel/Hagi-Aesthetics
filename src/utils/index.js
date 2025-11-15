@@ -54,7 +54,7 @@ export const Faqs = [
     {
         title: "2. Payments & Discounts",
         faqs: [
-            { q: "What payment methods do you accept?", a: "We accept Visa, MasterCard, PayPal, and Apple Pay." },
+            { q: "What payment methods do you accept?", a: "We accept major credit and debit cards through our secure Stripe checkout." },
             { q: "Can I use multiple discount codes?", a: "Only one discount code can be used per order unless stated otherwise in a special promotion." },
             { q: "My discount code isn’t working. What should I do?", a: "Double-check that the code is still valid and hasn’t expired. If issues persist, contact us." },
         ],

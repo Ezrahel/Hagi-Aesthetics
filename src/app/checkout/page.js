@@ -1,19 +1,26 @@
 'use client'
 import CTA from '@/components/CTA'
 import Image from 'next/image'
-import Link from 'next/link'
 import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { loadStripe } from '@stripe/stripe-js'
 
-const PAYPAL_CLIENT_ID = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID
+let stripePromise
+const getStripe = () => {
+    if (!stripePromise) {
+        const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+        if (!publishableKey) {
+            return null
+        }
+        stripePromise = loadStripe(publishableKey)
+    }
+    return stripePromise
+}
 
 const page = () => {
-    const [sdkReady, setSdkReady] = useState(false)
     const [processing, setProcessing] = useState(false)
-    const [success, setSuccess] = useState(null)
     const [error, setError] = useState('')
 
-    const [user, setUser] = useState(null)
     const [availableCoupons, setAvailableCoupons] = useState([])
     const [couponCode, setCouponCode] = useState('')
     const [appliedCoupon, setAppliedCoupon] = useState(null)
@@ -50,21 +57,17 @@ const page = () => {
     useEffect(() => {
         const load = async () => {
             const { data } = await supabase.auth.getUser()
-            const u = data?.user ?? null
-            setUser(u)
-            const meta = u?.user_metadata || {}
+            const meta = data?.user?.user_metadata || {}
             const coupons = Array.isArray(meta.coupons) ? meta.coupons : []
             setAvailableCoupons(coupons.filter(c => !c.used))
         }
         load()
-        const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
-            const u = session?.user ?? null
-            setUser(u)
-            const meta = u?.user_metadata || {}
+        const { data: authListener } = supabase.auth.onAuthStateChange((_evt, session) => {
+            const meta = session?.user?.user_metadata || {}
             const coupons = Array.isArray(meta.coupons) ? meta.coupons : []
             setAvailableCoupons(coupons.filter(c => !c.used))
         })
-        return () => { sub.subscription.unsubscribe() }
+        return () => { authListener?.subscription?.unsubscribe() }
     }, [])
 
     const applyCoupon = () => {
@@ -80,106 +83,48 @@ const page = () => {
         setAppliedCoupon({ ...c, type: 'per_item', amountPerItem: 5 })
     }
 
-    useEffect(() => {
-        if (!PAYPAL_CLIENT_ID) return
-        if (document.getElementById('paypal-sdk')) {
-            setSdkReady(true)
+    const startStripeCheckout = async () => {
+        if (items.length === 0) {
+            setError('Your cart is empty.')
             return
         }
-        const script = document.createElement('script')
-        script.id = 'paypal-sdk'
-        script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&currency=USD&intent=capture`
-        script.async = true
-        script.onload = () => setSdkReady(true)
-        document.body.appendChild(script)
-    }, [])
-
-    useEffect(() => {
-        if (!sdkReady) return
-        if (!(window).paypal) return
-        setError('')
-        ;(window).paypal.Buttons({
-            style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'paypal' },
-            createOrder: (_data, actions) => {
-                return actions.order.create({
-                    purchase_units: [
-                        {
-                            amount: {
-                                currency_code: 'USD',
-                                value: total,
-                                breakdown: {
-                                    item_total: { currency_code: 'USD', value: subtotal.toFixed(2) },
-                                    shipping: { currency_code: 'USD', value: shipping.toFixed(2) },
-                                    discount: { currency_code: 'USD', value: perItemDiscount.toFixed(2) },
-                                }
-                            },
-                            items: items.map(i => ({
-                                name: i.name,
-                                quantity: String(i.qty || 1),
-                                unit_amount: { currency_code: 'USD', value: (i.price || 0).toFixed(2) }
-                            }))
-                        }
-                    ]
-                })
-            },
-            onApprove: async (_data, actions) => {
-                setProcessing(true)
-                try {
-                    const details = await actions.order.capture()
-                    setSuccess({ id: details.id, status: details.status })
-                    // Mark coupon as used once an order succeeds
-                    if (appliedCoupon && user) {
-                        try {
-                            const meta = user.user_metadata || {}
-                            const coupons = Array.isArray(meta.coupons) ? meta.coupons : []
-                            const updated = coupons.map(c => c.code === appliedCoupon.code ? { ...c, used: true, usedAt: new Date().toISOString() } : c)
-                            await supabase.auth.updateUser({ data: { coupons: updated } })
-                            setAvailableCoupons(updated.filter(c => !c.used))
-                        } catch (e) {
-                            console.error('Failed to mark coupon used', e)
-                        }
-                    }
-                    // Create order record
-                    try {
-                        await fetch('/api/orders', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                paypalOrderId: details.id,
-                                status: details.status,
-                                items,
-                                subtotal,
-                                shipping,
-                                discount: perItemDiscount,
-                                total: Number(total),
-                                couponCode: appliedCoupon?.code || null,
-                                customerEmail: null,
-                                customerName: null,
-                                paypalCapture: details,
-                            })
-                        })
-                    } catch (e) {
-                        console.error('Failed to record order', e)
-                    }
-                } catch (e) {
-                    setError('Payment capture failed. Please try again.')
-                } finally {
-                    setProcessing(false)
-                }
-            },
-            onError: (err) => {
-                console.error(err)
-                setError('Payment failed to initialize. Please try again.')
-            },
-            onCancel: () => {
-                setError('Payment was canceled.')
+        try {
+            setProcessing(true)
+            setError('')
+            const stripePromiseInstance = getStripe()
+            if (!stripePromiseInstance) {
+                throw new Error('Missing Stripe publishable key')
             }
-        }).render('#paypal-checkout-container')
-        return () => {
-            const c = document.getElementById('paypal-checkout-container')
-            if (c) c.innerHTML = ''
+            await stripePromiseInstance
+            const response = await fetch('/api/create-checkout-session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    items: items.map((item) => ({
+                        productId: item.id,
+                        quantity: item.qty || 1
+                    })),
+                    shipping,
+                    discount: perItemDiscount,
+                    couponCode: appliedCoupon?.code || null,
+                    metadata: { source: 'checkout_page' }
+                })
+            })
+            if (!response.ok) {
+                const detail = await response.json().catch(() => ({}))
+                throw new Error(detail?.error || 'Failed to create Stripe checkout session')
+            }
+            const { url } = await response.json()
+            if (!url) {
+                throw new Error('Stripe session URL missing in response')
+            }
+            window.location.href = url
+        } catch (e) {
+            setError(e.message || 'Unable to start Stripe checkout.')
+        } finally {
+            setProcessing(false)
         }
-    }, [sdkReady, subtotal, shipping, total, perItemDiscount, items, appliedCoupon, user])
+    }
 
     return (
         <div className='pt-20'>
@@ -240,14 +185,13 @@ const page = () => {
                         </div>
                     </div>
 
-                    <div id='paypal-checkout-container' className='mt-6'></div>
-                    
                     <div className='mt-6'>
-                        <button 
-                            onClick={() => window.location.href = `/api/paypal/create?amount=${total}`}
-                            className='w-full bg-pink text-lavender rounded-full py-3 font-montserrat font-bold text-[16px] uppercase hover:bg-pink/90 transition-colors'
+                        <button
+                            onClick={startStripeCheckout}
+                            disabled={processing}
+                            className={`w-full bg-pink text-lavender rounded-full py-3 font-montserrat font-bold text-[16px] uppercase transition-colors ${processing ? 'opacity-60 cursor-not-allowed' : 'hover:bg-pink/90'}`}
                         >
-                            Pay with PayPal
+                            {processing ? 'Redirecting...' : 'Pay with Stripe'}
                         </button>
                     </div>
                 </div>

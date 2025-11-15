@@ -4,8 +4,19 @@ import React, { useEffect, useRef, useState } from 'react'
 import gsap from "gsap"
 import { supabase } from '@/lib/supabaseClient'
 import { useRouter } from 'next/navigation'
+import { loadStripe } from '@stripe/stripe-js'
 
-const PAYPAL_CLIENT_ID = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID
+let stripePromise
+const getStripe = () => {
+    if (!stripePromise) {
+        const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+        if (!publishableKey) {
+            return null
+        }
+        stripePromise = loadStripe(publishableKey)
+    }
+    return stripePromise
+}
 
 const Spinwheel = () => {
     const router = useRouter()
@@ -15,23 +26,6 @@ const Spinwheel = () => {
     const [user, setUser] = useState(null)
     const [freeSpinsLeft, setFreeSpinsLeft] = useState(3)
     const [paidCreditsCents, setPaidCreditsCents] = useState(0)
-    const [showPayModal, setShowPayModal] = useState(false)
-    const [loading, setLoading] = useState(false)
-
-    // On return from PayPal, credit $1 and auto start paid spin
-    useEffect(() => {
-        const params = new URLSearchParams(window.location.search)
-        const paymentStatus = params.get('payment')
-        if (paymentStatus === 'success') {
-            const next = paidCreditsCents + 100
-            setPaidCreditsCents(next)
-            persistMeta(freeSpinsLeft, next)
-            params.delete('payment')
-            const url = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`
-            window.history.replaceState({}, '', url)
-            startSpin('paid')
-        }
-    }, [])
 
     // Load session & metadata
     useEffect(() => {
@@ -59,7 +53,7 @@ const Spinwheel = () => {
             }
         })
         return () => {
-            sub.subscription.unsubscribe()
+            sub?.subscription?.unsubscribe()
         }
     }, [])
 
@@ -128,21 +122,35 @@ const Spinwheel = () => {
         })
     }
 
-    const startPaypalCheckout = async () => {
+    const startStripeCheckout = async () => {
         try {
-            setLoading(true)
-            const res = await fetch('/api/paypal/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: '1.00' }) })
-            if (!res.ok) {
-                const text = await res.text().catch(() => '')
-                console.error('PayPal create error', res.status, text)
-                throw new Error('Failed to create PayPal order')
+            const stripePromiseInstance = getStripe()
+            if (!stripePromiseInstance) {
+                throw new Error('Stripe publishable key is missing')
             }
-            const { approvalUrl } = await res.json()
-            window.location.href = approvalUrl
+            await stripePromiseInstance
+            const response = await fetch('/api/create-checkout-session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    productId: process.env.NEXT_PUBLIC_SPIN_CREDIT_PRODUCT_ID || 'spin-credit',
+                    quantity: 1,
+                    metadata: { source: 'spinwheel_topup' }
+                })
+            })
+            if (!response.ok) {
+                const detail = await response.json().catch(() => ({}))
+                throw new Error(detail?.error || 'Failed to create Stripe checkout session')
+            }
+            const { url } = await response.json()
+            if (!url) {
+                throw new Error('Stripe session URL missing in response')
+            }
+            window.location.href = url
         } catch (e) {
             console.error(e)
         } finally {
-            setLoading(false)
+            // no-op
         }
     }
 
@@ -160,8 +168,8 @@ const Spinwheel = () => {
             startSpin('paid')
             return
         }
-        // No credits: redirect to PayPal checkout
-        startPaypalCheckout()
+        // No credits: redirect to Stripe checkout for spin credits
+        startStripeCheckout()
     }
 
     return (

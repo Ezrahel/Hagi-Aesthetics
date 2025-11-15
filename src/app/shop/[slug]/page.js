@@ -1,16 +1,52 @@
 'use client'
 import Image from 'next/image';
 import React, { use as usePromise, useEffect, useMemo, useState } from 'react'
-import { productData } from '@/utils';
 import Banner from '@/components/Banner';
 import CTA from '@/components/CTA';
+import { loadStripe } from '@stripe/stripe-js';
+
+let stripePromise
+const getStripe = () => {
+    if (!stripePromise) {
+        const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+        if (!publishableKey) {
+            return null
+        }
+        stripePromise = loadStripe(publishableKey)
+    }
+    return stripePromise
+}
 
 export default function ProductPage({ params }) {
     const { slug } = usePromise(params);
-
-    const product = productData[slug];
+    const [product, setProduct] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
     const [qty, setQty] = useState(1)
+
+    useEffect(() => {
+        const fetchProduct = async () => {
+            try {
+                const response = await fetch(`/api/products/${slug}`)
+                const data = await response.json()
+                
+                if (response.ok) {
+                    setProduct(data.product)
+                } else {
+                    setError('Product not found')
+                }
+            } catch (err) {
+                setError('Failed to load product')
+                console.error(err)
+            } finally {
+                setLoading(false)
+            }
+        }
+
+        fetchProduct()
+    }, [slug])
+
     useEffect(() => {
         try {
             const sp = new URLSearchParams(window.location.search)
@@ -22,8 +58,25 @@ export default function ProductPage({ params }) {
     const price = product?.price ?? 0
     const total = useMemo(() => (qty * price).toFixed(2), [qty, price])
 
-    if (!product) {
-        return <div className="p-10">Product not found</div>
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-pink mx-auto"></div>
+                    <p className="mt-4 text-gray-600">Loading product...</p>
+                </div>
+            </div>
+        )
+    }
+
+    if (error || !product) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="text-center">
+                    <p className="text-red-600">{error || 'Product not found'}</p>
+                </div>
+            </div>
+        )
     }
 
     const decrease = () => setQty(q => Math.max(1, q - 1))
@@ -34,13 +87,13 @@ export default function ProductPage({ params }) {
             if (typeof window === 'undefined') return
             const key = 'cart'
             const prev = JSON.parse(window.localStorage.getItem(key) || '[]')
-            const existingIndex = prev.findIndex((i) => i.slug === slug)
+            const existingIndex = prev.findIndex((i) => i.id === product.id)
             if (existingIndex >= 0) {
                 const updated = [...prev]
                 updated[existingIndex].qty = Math.min(99, (updated[existingIndex].qty || 1) + qty)
                 window.localStorage.setItem(key, JSON.stringify(updated))
             } else {
-                const item = { slug, name: product.name, price, qty, image: product.image }
+                const item = { id: product.id, slug, name: product.name, price, qty, image: product.image }
                 window.localStorage.setItem(key, JSON.stringify([...(prev || []), item]))
             }
             window.dispatchEvent(new Event('cart:update'))
@@ -52,10 +105,32 @@ export default function ProductPage({ params }) {
 
     const buyNow = async () => {
         try {
-            window.location.href = `/api/paypal/create?amount=${encodeURIComponent(total)}`
+            const stripePromiseInstance = getStripe()
+            if (!stripePromiseInstance) {
+                throw new Error('Missing Stripe publishable key')
+            }
+            await stripePromiseInstance
+            const response = await fetch('/api/create-checkout-session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    productId: product.id,
+                    quantity: qty,
+                    metadata: { source: 'product_page', slug }
+                })
+            })
+            if (!response.ok) {
+                const detail = await response.json().catch(() => ({}))
+                throw new Error(detail?.error || 'Failed to create Stripe checkout session')
+            }
+            const { url } = await response.json()
+            if (!url) {
+                throw new Error('Stripe session URL missing in response')
+            }
+            window.location.href = url
         } catch (e) {
             console.error(e)
-            alert('Failed to initialize PayPal checkout. Please try again.')
+            alert('Failed to initialize Stripe checkout. Please try again.')
         }
     }
 

@@ -10,8 +10,10 @@
     "ngrok": "ngrok http 3000"
   },
   "dependencies": {
+    "@clerk/nextjs": "^5.3.0",
     "@react-three/drei": "^10.6.1",
     "@react-three/fiber": "^9.3.0",
+    "@stripe/stripe-js": "^4.10.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.57.4",
     "gsap": "^3.13.0",
@@ -19,6 +21,7 @@
     "next": "15.4.5",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "stripe": "^16.3.0",
     "three": "^0.178.0"
   },
   "devDependencies": {
