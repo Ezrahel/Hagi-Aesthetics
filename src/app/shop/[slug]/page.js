@@ -116,6 +116,10 @@ export default function ProductPage({ params }) {
                 body: JSON.stringify({
                     productId: product.id,
                     quantity: qty,
+                    // include fallback metadata so server can create checkout even when DB table missing
+                    name: product.name,
+                    price: product.price,
+                    image: product.image,
                     metadata: { source: 'product_page', slug }
                 })
             })

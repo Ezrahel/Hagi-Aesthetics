@@ -12,12 +12,36 @@ CREATE TABLE IF NOT EXISTS products (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Create orders table
+CREATE TABLE IF NOT EXISTS orders (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  orderId TEXT UNIQUE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  product_id TEXT,
+  status TEXT DEFAULT 'pending' NOT NULL,
+  items JSONB,
+  subtotal DECIMAL(10,2) DEFAULT 0.00,
+  shipping DECIMAL(10,2) DEFAULT 0.00,
+  discount DECIMAL(10,2) DEFAULT 0.00,
+  total DECIMAL(10,2) DEFAULT 0.00,
+  couponCode TEXT,
+  customerEmail TEXT,
+  customerName TEXT,
+  session_id TEXT,
+  payment_intent TEXT,
+  provider TEXT DEFAULT 'stripe',
+  providerPayload JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Create admin user (you'll need to run this in Supabase SQL editor)
 -- First, create the user in Supabase Auth dashboard with email: admin@hagi-aesthetics.com
 -- Then run this to set up the user metadata:
+-- Note: Supabase uses raw_user_meta_data, not user_metadata
 UPDATE auth.users 
-SET user_metadata = jsonb_set(
-  COALESCE(user_metadata, '{}'::jsonb), 
+SET raw_user_meta_data = jsonb_set(
+  COALESCE(raw_user_meta_data, '{}'::jsonb), 
   '{role}', 
   '"admin"'
 ) 
@@ -25,6 +49,7 @@ WHERE email = 'admin@hagi-aesthetics.com';
 
 -- Enable RLS (Row Level Security)
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 
 -- Create policies for products table
 -- Allow public read access
@@ -36,6 +61,19 @@ CREATE POLICY "Admin full access" ON products
   FOR ALL USING (
     auth.jwt() ->> 'email' = 'admin@hagi-aesthetics.com'
   );
+
+-- Create policies for orders table
+-- Allow users to read their own orders
+CREATE POLICY "Users can read their own orders" ON orders
+  FOR SELECT USING (auth.uid() = user_id OR auth.jwt() ->> 'email' = 'admin@hagi-aesthetics.com');
+
+-- Allow users to insert their own orders (server-side auth will enforce user_id)
+CREATE POLICY "Users can insert their own orders" ON orders
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- Allow users to update their own orders
+CREATE POLICY "Users can update their own orders" ON orders
+  FOR UPDATE USING (auth.uid() = user_id OR auth.jwt() ->> 'email' = 'admin@hagi-aesthetics.com');
 
 -- Insert sample products
 INSERT INTO products (name, productno, description, description2, productdetails, price, image) VALUES

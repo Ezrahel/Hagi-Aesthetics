@@ -1,6 +1,6 @@
 import Stripe from 'stripe'
 import Link from 'next/link'
-import { auth } from '@clerk/nextjs/server'
+// switched from Clerk to Supabase auth; we infer linked user from order record
 import { createClient } from '@supabase/supabase-js'
 import { getEnvVar } from '@/lib/config'
 
@@ -31,7 +31,9 @@ async function finalizeOrder(sessionId, paymentIntent, amountTotal) {
 }
 
 export default async function SuccessPage({ searchParams }) {
-	const { userId } = auth()
+	// We no longer use Clerk for server-side auth here. The order finalize call
+	// returns the saved order record which contains `user_id` if the purchase
+	// was linked to a signed-in user. Use that to indicate linkage.
 	const sessionId = searchParams?.session_id
 
 	if (!sessionId) {

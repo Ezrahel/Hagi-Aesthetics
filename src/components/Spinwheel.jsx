@@ -26,6 +26,7 @@ const Spinwheel = () => {
     const [user, setUser] = useState(null)
     const [freeSpinsLeft, setFreeSpinsLeft] = useState(3)
     const [paidCreditsCents, setPaidCreditsCents] = useState(0)
+    const [showBuyModal, setShowBuyModal] = useState(false)
 
     // Load session & metadata
     useEffect(() => {
@@ -122,7 +123,7 @@ const Spinwheel = () => {
         })
     }
 
-    const startStripeCheckout = async () => {
+    const startStripeCheckout = async (productIdOverride = null, quantity = 1, price = null) => {
         try {
             const stripePromiseInstance = getStripe()
             if (!stripePromiseInstance) {
@@ -133,14 +134,20 @@ const Spinwheel = () => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    productId: process.env.NEXT_PUBLIC_SPIN_CREDIT_PRODUCT_ID || 'spin-credit',
-                    quantity: 1,
+                    productId: productIdOverride || process.env.NEXT_PUBLIC_SPIN_CREDIT_PRODUCT_ID || 'spin-credit',
+                    quantity: quantity || 1,
+                    // include explicit price, name, and image so server can use inline price_data fallback
+                    price: typeof price === 'number' ? price : undefined,
+                    name: 'Spin Credits',
+                    image: undefined, // optional fallback image
                     metadata: { source: 'spinwheel_topup' }
                 })
             })
             if (!response.ok) {
                 const detail = await response.json().catch(() => ({}))
-                throw new Error(detail?.error || 'Failed to create Stripe checkout session')
+                const errorMsg = detail?.error || `Server returned ${response.status}`
+                console.error('Stripe checkout session creation failed:', errorMsg, detail)
+                throw new Error(errorMsg)
             }
             const { url } = await response.json()
             if (!url) {
@@ -148,7 +155,8 @@ const Spinwheel = () => {
             }
             window.location.href = url
         } catch (e) {
-            console.error(e)
+            console.error('startStripeCheckout error:', e.message || e)
+            alert(`Error: ${e.message || 'Failed to create Stripe checkout session'}`)
         } finally {
             // no-op
         }
@@ -168,8 +176,8 @@ const Spinwheel = () => {
             startSpin('paid')
             return
         }
-        // No credits: redirect to Stripe checkout for spin credits
-        startStripeCheckout()
+        // No credits: open buy modal
+        setShowBuyModal(true)
     }
 
     return (
@@ -206,12 +214,55 @@ const Spinwheel = () => {
                         disabled={spinning}
                         className={`font-astrid text-[16px] lg:text-[20px] text-black bg-pink shadow-lg shadow-white rounded-full px-4 lg:px-10 py-2 lg:py-3 cursor-pointer hover:scale-105 transition ${spinning ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
-                        {spinning ? "Spinning..." : "Spin Wheel"}
+                        {spinning
+                            ? "Spinning..."
+                            : (freeSpinsLeft > 0 || paidCreditsCents >= 100)
+                                ? "Spin Wheel"
+                                : "Buy Spins"
+                        }
                     </button>
                     {!user && (
                         <p className="text-sm text-gray-600">Please sign in to spin.</p>
                     )}
                 </div>
+
+                {showBuyModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                        <div className="bg-white rounded-lg p-6 w-[90%] max-w-md">
+                            <h3 className="text-lg font-bold mb-4">Buy Spins</h3>
+                            <p className="text-sm text-gray-600 mb-4">Choose a spin pack to purchase and be redirected to checkout.</p>
+                            <div className="flex flex-col gap-3">
+                                <button
+                                    onClick={async () => {
+                                        setShowBuyModal(false)
+                                        // Buy 1 spin ($1)
+                                        await startStripeCheckout(undefined, 1, 1.00)
+                                    }}
+                                    className="w-full bg-pink text-black rounded-full py-2"
+                                >
+                                    Buy 1 Spin — $1.00
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        setShowBuyModal(false)
+                                        // Buy 5 spins ($4 total)
+                                        // We send price = 0.80 so unit price times quantity (5 * 0.80 = 4.00)
+                                        await startStripeCheckout(undefined, 5, 0.80)
+                                    }}
+                                    className="w-full bg-pink/90 text-black rounded-full py-2"
+                                >
+                                    Buy 5 Spins — $4.00
+                                </button>
+                                <button
+                                    onClick={() => setShowBuyModal(false)}
+                                    className="w-full border border-gray-200 rounded-full py-2 mt-2"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {result && (
                     <div className="h-full flex justify-center items-center absolute top-1/3 -translate-y-1/2   lg:top-2/4  text-center  font-satoshi px-8 lg:px-0">

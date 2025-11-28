@@ -102,7 +102,10 @@ const page = () => {
                 body: JSON.stringify({
                     items: items.map((item) => ({
                         productId: item.id,
-                        quantity: item.qty || 1
+                        quantity: item.qty || 1,
+                        name: item.name,
+                        price: item.price,
+                        image: item.image,
                     })),
                     shipping,
                     discount: perItemDiscount,
