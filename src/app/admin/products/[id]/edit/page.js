@@ -22,20 +22,16 @@ export default function EditProduct({ params }) {
         image: ''
     })
 
-    useEffect(() => {
-        const checkAuth = async () => {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user || user.email !== 'admin@hagi-aesthetics.com') {
-                router.push('/admin/login')
-                return
-            }
-            setUser(user)
-            loadProduct()
-        }
-        checkAuth()
-    }, [router, id])
 
-    const loadProduct = async () => {
+    const handleChange = (e) => {
+        const { name, value } = e.target
+        setFormData(prev => ({
+            ...prev,
+            [name]: value
+        }))
+    }
+
+    const loadProduct = useCallback(async () => {
         try {
             const { data, error } = await supabase
                 .from('products')
@@ -60,43 +56,20 @@ export default function EditProduct({ params }) {
         } finally {
             setInitialLoading(false)
         }
-    }
+    }, [id]) // ➡️ Dependency array for useCallback: only rerun if `id` changes
 
-    const handleChange = (e) => {
-        const { name, value } = e.target
-        setFormData(prev => ({
-            ...prev,
-            [name]: value
-        }))
-    }
-
-    const handleSubmit = async (e) => {
-        e.preventDefault()
-        setLoading(true)
-        setError('')
-
-        try {
-            const productData = {
-                ...formData,
-                price: parseFloat(formData.price) || 0,
-                updated_at: new Date().toISOString()
+    useEffect(() => {
+        const checkAuth = async () => {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user || user.email !== 'admin@hagi-aesthetics.com') {
+                router.push('/admin/login')
+                return
             }
-
-            const { error } = await supabase
-                .from('products')
-                .update(productData)
-                .eq('id', id)
-
-            if (error) throw error
-
-            router.push('/admin')
-        } catch (err) {
-            setError('Failed to update product: ' + err.message)
-            console.error(err)
-        } finally {
-            setLoading(false)
+            setUser(user)
+            loadProduct()
         }
-    }
+        checkAuth()
+    }, [router, id, loadProduct])
 
     if (initialLoading) {
         return (

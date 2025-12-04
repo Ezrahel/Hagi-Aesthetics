@@ -3,7 +3,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import React, { useState, useEffect } from 'react'
 
-const page = () => {
+// ➡️ CHANGE: Function name must start with an uppercase letter (Page)
+const Page = () => {
     const [products, setProducts] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
@@ -75,4 +76,5 @@ const page = () => {
     )
 }
 
-export default page
+// ➡️ CHANGE: Export the newly named function (Page)
+export default Page

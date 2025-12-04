@@ -50,7 +50,7 @@ export default function Page() {
           {error && <p className="text-red-600 text-sm">{error}</p>}
           <button type="submit" disabled={loading} className="w-full bg-pink text-white py-2 rounded hover:bg-pink/90 transition-colors disabled:opacity-60">{loading ? 'Signing in...' : 'Sign In'}</button>
         </form>
-        <p className="mt-4 text-sm text-gray-600">Don't have an account? <Link href="/sign-up" className="text-pink hover:text-pink/80">Sign up</Link></p>
+        <p className="mt-4 text-sm text-gray-600">Don&apos;t have an account? <Link href="/sign-up" className="text-pink hover:text-pink/80">Sign up</Link></p>
       </div>
     </div>
   );

@@ -17,7 +17,7 @@ const getStripe = () => {
     return stripePromise
 }
 
-const page = () => {
+const Page = () => {
     const [processing, setProcessing] = useState(false)
     const [error, setError] = useState('')
 
@@ -204,4 +204,4 @@ const page = () => {
     )
 }
 
-export default page
+export default Page

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import React, { useEffect, useMemo, useState } from 'react'
 import CTA from '@/components/CTA'
 
-const page = () => {
+const Page = () => {
     const [items, setItems] = useState([])
 
     useEffect(() => {
@@ -98,4 +98,4 @@ const page = () => {
     )
 }
 
-export default page
+export default Page
