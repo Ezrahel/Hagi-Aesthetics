@@ -4,20 +4,8 @@ import React, { use as usePromise, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Banner from '@/components/Banner';
 import CTA from '@/components/CTA';
-import { loadStripe } from '@stripe/stripe-js';
+import { getStripe } from '@/lib/stripe';
 import { productData } from '@/utils/index';
-
-let stripePromise
-const getStripe = () => {
-    if (!stripePromise) {
-        const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-        if (!publishableKey) {
-            return null
-        }
-        stripePromise = loadStripe(publishableKey)
-    }
-    return stripePromise
-}
 
 export default function ProductPage({ params }) {
     const router = useRouter()

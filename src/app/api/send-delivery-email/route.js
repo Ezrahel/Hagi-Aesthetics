@@ -7,7 +7,7 @@ import { NextResponse } from 'next/server'
 // For production, you might want to use Resend, SendGrid, or Nodemailer
 
 async function sendEmail(deliveryData) {
-    const recipientEmail = 'devreel024@gmail.com' // Testing email
+    const recipientEmail = 'hagiaesthetics@gmail.com' // Testing email
     
     // Format the delivery information
     const emailBody = `

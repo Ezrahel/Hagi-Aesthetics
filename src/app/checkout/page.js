@@ -4,19 +4,7 @@ import Image from 'next/image'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
-import { loadStripe } from '@stripe/stripe-js'
-
-let stripePromise
-const getStripe = () => {
-    if (!stripePromise) {
-        const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-        if (!publishableKey) {
-            return null
-        }
-        stripePromise = loadStripe(publishableKey)
-    }
-    return stripePromise
-}
+import { getStripe } from '@/lib/stripe'
 
 const Page = () => {
     const router = useRouter()

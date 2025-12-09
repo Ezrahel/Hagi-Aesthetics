@@ -4,19 +4,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import gsap from "gsap"
 import { supabase } from '@/lib/supabaseClient'
 import { useRouter } from 'next/navigation'
-import { loadStripe } from '@stripe/stripe-js'
-
-let stripePromise
-const getStripe = () => {
-    if (!stripePromise) {
-        const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-        if (!publishableKey) {
-            return null
-        }
-        stripePromise = loadStripe(publishableKey)
-    }
-    return stripePromise
-}
+import { getStripe } from '@/lib/stripe'
 
 const Spinwheel = () => {
     const router = useRouter()

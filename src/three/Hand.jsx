@@ -61,6 +61,12 @@ export function Hand(props) {
       if (cameraAnimation.current) {
         cameraAnimation.current.kill()
       }
+      // Clean up all ScrollTrigger instances to prevent memory leaks
+      ScrollTrigger.getAll().forEach(trigger => {
+        if (trigger.vars?.trigger === '#scrollarea') {
+          trigger.kill()
+        }
+      })
     }
   }, [actions, animations])
 

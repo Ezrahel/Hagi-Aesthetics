@@ -392,15 +392,21 @@ export async function POST(request) {
 		}
 
 		const origin = getOriginFromRequestUrl(request.url)
+		
+		// Parallelize Stripe coupon creation and order update (they're independent)
+		const [couponResult] = await Promise.allSettled([
+			discountCents > 0 
+				? stripe.coupons.create({
+					amount_off: discountCents,
+					currency: 'usd',
+					duration: 'once',
+				})
+				: Promise.resolve(null)
+		])
+		
 		const discounts = []
-
-		if (discountCents > 0) {
-			const coupon = await stripe.coupons.create({
-				amount_off: discountCents,
-				currency: 'usd',
-				duration: 'once',
-			})
-			discounts.push({ coupon: coupon.id })
+		if (couponResult.status === 'fulfilled' && couponResult.value) {
+			discounts.push({ coupon: couponResult.value.id })
 		}
 
 		const metadata = {

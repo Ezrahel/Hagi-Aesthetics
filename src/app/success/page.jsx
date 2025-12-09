@@ -273,12 +273,17 @@ export default async function SuccessPage({ searchParams }) {
 	let order = null
 
 	if (paymentStatus === 'paid') {
+		// Parallelize order finalization and email sending (non-blocking)
+		const deliveryInfo = session?.metadata?.deliveryInfo || null
+		
+		// Finalize order first (needed for page display)
 		order = await finalizeOrder(sessionId, typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id, session.amount_total)
 
-		// Fire-and-forget order email – do not block page render or throw on failure
-		const deliveryInfo = session?.metadata?.deliveryInfo || null
-		sendOrderEmail({ order, session, deliveryInfo }).catch((err) => {
-			console.error('Background sendOrderEmail error:', err)
+		// Fire email send in background - use setImmediate for true non-blocking
+		setImmediate(() => {
+			sendOrderEmail({ order, session, deliveryInfo }).catch((err) => {
+				console.error('Background sendOrderEmail error:', err)
+			})
 		})
 	}
 
