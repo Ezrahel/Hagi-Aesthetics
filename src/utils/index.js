@@ -6,7 +6,7 @@ export const productData = {
         description: 'This premium product is crafted by Hagi Aesthetics, ensuring you receive a luxurious experience. The 8 oz (250 ml) bottle is perfect for those looking to enhance their skincare routine. The blend of Lavender and Vanilla offers a soothing aroma.',
         description2: "Crafted by Hagi Aesthetics, the Hagi’s Whipped Velvet Elixir is a premium skincare essential that enhances your daily self-care. Designed to deeply moisturize, soothe, and soften your skin, this luxurious butter delivers a rich, creamy feel with every application. The Lavender and Vanilla aroma helps you relax and unwind, making it perfect for both morning and night routines.",
         productdetails: "Product Details",
-        price: 29.99,
+        price: 6.99,
     },
     'suck-it-up-body-butter': {
         image: '/product2.png',
@@ -15,7 +15,7 @@ export const productData = {
         description: 'Indulge in daily luxury with this gentle formula designed to hydrate and refresh your skin. Infused with the calming scent of Strawberry Vanilla for a spa-like experience.',
         description2: "Crafted by Hagi Aesthetics, the Suck It Up Body Butter is a premium skincare essential that enhances your daily self-care. Designed to deeply moisturize, soothe, and soften your skin, this luxurious butter delivers a rich, creamy feel with every application. The Lavender and Vanilla aroma helps you relax and unwind, making it perfect for both morning and night routines.",
         productdetails: "Product Details",
-        price: 24.99,
+        price: 7.99,
     },
     'vietnamese-hair-vendor-list': {
         image: '/product3.png',
@@ -24,7 +24,7 @@ export const productData = {
         description: 'A carefully curated Vendor List that gives you access to verified beauty and lifestyle suppliers — the same ones successful small business owners trust. You’ll get: 📍 Direct contact details of suppliers (no middlemen) 🌐 Links to websites & social platforms 💰 Info on minimum order quantities (MOQs) 🚚 Shipping & fulfillment info (domestic & international)',
         description2: "A downloadable PDF with: 🏭 Direct contact info of verified Hair vendors 🌐 Links to their websites and social pages 📦 Minimum order quantities & pricing info 🚛 Shipping/fulfillment details (US & international) 💬 Tips on vendor communication & negotiation",
         productdetails: "✅What You’ll Get:",
-        price: 39.00,
+        price: 40.00,
     },
 }
 

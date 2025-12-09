@@ -133,6 +133,7 @@ const Spinwheel = () => {
             const response = await fetch('/api/create-checkout-session', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include', // Include cookies in the request
                 body: JSON.stringify({
                     productId: productIdOverride || process.env.NEXT_PUBLIC_SPIN_CREDIT_PRODUCT_ID || 'spin-credit',
                     quantity: quantity || 1,
@@ -186,7 +187,7 @@ const Spinwheel = () => {
                 <div className='flex flex-col gap-4 justify-center items-center'>
                     <Image src="/playtowin.png" alt="bg" width={1000} height={1000} className='w-[75%] lg:w-[700px] h-auto object-cover' />
                     <h3 className='w-full lg:w-[600px] text-center font-satoshi text-[14px] lg:text-[18px]'>
-                        SPIN TO WIN! Get 3 FREE opportunities to spin the wheel & receive $5-$10 OFF your TOTAL purchase at checkout. YOU LOVE THE THRILL ? If you love to win, PLAY 0TO HAGI WIN!!❤️
+                        SPIN TO WIN! Get 3 FREE opportunities to spin the wheel & receive $5-$10 OFF your TOTAL purchase at checkout. YOU LOVE THE THRILL ? If you love to win, PLAY HAGI TO WIN!!❤️
                     </h3>
                     {user && (
                         <div className="text-sm text-gray-700">

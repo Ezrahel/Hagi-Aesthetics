@@ -2,6 +2,7 @@
 import CTA from '@/components/CTA'
 import Image from 'next/image'
 import React, { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { loadStripe } from '@stripe/stripe-js'
 
@@ -18,6 +19,7 @@ const getStripe = () => {
 }
 
 const Page = () => {
+    const router = useRouter()
     const [processing, setProcessing] = useState(false)
     const [error, setError] = useState('')
 
@@ -33,6 +35,12 @@ const Page = () => {
         try {
             const stored = JSON.parse(window.localStorage.getItem('cart') || '[]')
             setItems(Array.isArray(stored) ? stored : [])
+            
+            // Check if delivery info exists, if not redirect to delivery-info page
+            const deliveryInfo = localStorage.getItem('deliveryInfo')
+            if (!deliveryInfo && stored.length > 0) {
+                router.push('/delivery-info')
+            }
         } catch {
             setItems([])
         }
@@ -96,9 +104,22 @@ const Page = () => {
                 throw new Error('Missing Stripe publishable key')
             }
             await stripePromiseInstance
+            
+            // Get delivery info from localStorage
+            let deliveryInfo = null
+            try {
+                const saved = localStorage.getItem('deliveryInfo')
+                if (saved) {
+                    deliveryInfo = JSON.parse(saved)
+                }
+            } catch (e) {
+                console.error('Failed to load delivery info', e)
+            }
+            
             const response = await fetch('/api/create-checkout-session', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include', // Include cookies in the request
                 body: JSON.stringify({
                     items: items.map((item) => ({
                         productId: item.id,
@@ -110,7 +131,18 @@ const Page = () => {
                     shipping,
                     discount: perItemDiscount,
                     couponCode: appliedCoupon?.code || null,
-                    metadata: { source: 'checkout_page' }
+                    customerEmail: deliveryInfo?.email || null,
+                    customerName: deliveryInfo?.fullName || null,
+                    metadata: { 
+                        source: 'checkout_page',
+                        deliveryInfo: deliveryInfo ? {
+                            phone: deliveryInfo.phone,
+                            address: deliveryInfo.address,
+                            city: deliveryInfo.city,
+                            state: deliveryInfo.state,
+                            zipCode: deliveryInfo.zipCode
+                        } : null
+                    }
                 })
             })
             if (!response.ok) {

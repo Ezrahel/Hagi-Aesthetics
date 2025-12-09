@@ -87,7 +87,7 @@ const Page = () => {
                         <span className='font-satoshi text-[14px]'>Estimated Total</span>
                         <span className='font-satoshi font-bold'>${(subtotal + 4.99).toFixed(2)}</span>
                     </div>
-                    <Link href='/checkout' className='w-full block text-center bg-pink text-lavender rounded-full py-3 mt-2'>Proceed to Pay</Link>
+                    <Link href='/delivery-info' className='w-full block text-center bg-pink text-lavender rounded-full py-3 mt-2'>Proceed to Checkout</Link>
                 </div>
             </div>
 

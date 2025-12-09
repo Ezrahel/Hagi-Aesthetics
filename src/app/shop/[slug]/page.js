@@ -1,9 +1,11 @@
 'use client'
 import Image from 'next/image';
 import React, { use as usePromise, useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Banner from '@/components/Banner';
 import CTA from '@/components/CTA';
 import { loadStripe } from '@stripe/stripe-js';
+import { productData } from '@/utils/index';
 
 let stripePromise
 const getStripe = () => {
@@ -18,6 +20,7 @@ const getStripe = () => {
 }
 
 export default function ProductPage({ params }) {
+    const router = useRouter()
     const { slug } = usePromise(params);
     const [product, setProduct] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -55,7 +58,9 @@ export default function ProductPage({ params }) {
         } catch {}
     }, [])
 
-    const price = product?.price ?? 0
+    // Ensure price comes from productData if available (authoritative source)
+    const productFromData = productData[slug]
+    const price = productFromData?.price ?? product?.price ?? 0
     const total = useMemo(() => (qty * price).toFixed(2), [qty, price])
 
     if (loading) {
@@ -88,12 +93,24 @@ export default function ProductPage({ params }) {
             const key = 'cart'
             const prev = JSON.parse(window.localStorage.getItem(key) || '[]')
             const existingIndex = prev.findIndex((i) => i.id === product.id)
+            // Ensure we use the correct price from productData if available
+            const productFromData = productData[slug]
+            const finalPrice = productFromData?.price ?? price
             if (existingIndex >= 0) {
                 const updated = [...prev]
                 updated[existingIndex].qty = Math.min(99, (updated[existingIndex].qty || 1) + qty)
+                // Update price to ensure it's correct
+                updated[existingIndex].price = finalPrice
                 window.localStorage.setItem(key, JSON.stringify(updated))
             } else {
-                const item = { id: product.id, slug, name: product.name, price, qty, image: product.image }
+                const item = { 
+                    id: product.id, 
+                    slug, 
+                    name: product.name, 
+                    price: finalPrice, 
+                    qty, 
+                    image: product.image 
+                }
                 window.localStorage.setItem(key, JSON.stringify([...(prev || []), item]))
             }
             window.dispatchEvent(new Event('cart:update'))
@@ -103,38 +120,39 @@ export default function ProductPage({ params }) {
         }
     }
 
-    const buyNow = async () => {
+    const buyNow = () => {
         try {
-            const stripePromiseInstance = getStripe()
-            if (!stripePromiseInstance) {
-                throw new Error('Missing Stripe publishable key')
-            }
-            await stripePromiseInstance
-            const response = await fetch('/api/create-checkout-session', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    productId: product.id,
-                    quantity: qty,
-                    // include fallback metadata so server can create checkout even when DB table missing
+            if (typeof window === 'undefined') return
+            const key = 'cart'
+            const prev = JSON.parse(window.localStorage.getItem(key) || '[]')
+            const existingIndex = prev.findIndex((i) => i.id === product.id)
+            const productFromData = productData[slug]
+            const finalPrice = productFromData?.price ?? price
+
+            if (existingIndex >= 0) {
+                const updated = [...prev]
+                updated[existingIndex].qty = Math.min(99, (updated[existingIndex].qty || 1) + qty)
+                updated[existingIndex].price = finalPrice
+                window.localStorage.setItem(key, JSON.stringify(updated))
+            } else {
+                const item = {
+                    id: product.id,
+                    slug,
                     name: product.name,
-                    price: product.price,
+                    price: finalPrice,
+                    qty,
                     image: product.image,
-                    metadata: { source: 'product_page', slug }
-                })
-            })
-            if (!response.ok) {
-                const detail = await response.json().catch(() => ({}))
-                throw new Error(detail?.error || 'Failed to create Stripe checkout session')
+                }
+                window.localStorage.setItem(key, JSON.stringify([...(prev || []), item]))
             }
-            const { url } = await response.json()
-            if (!url) {
-                throw new Error('Stripe session URL missing in response')
-            }
-            window.location.href = url
+
+            window.dispatchEvent(new Event('cart:update'))
+
+            // Redirect to delivery info page so customer can fill details before Stripe
+            router.push('/delivery-info')
         } catch (e) {
-            console.error(e)
-            alert('Failed to initialize Stripe checkout. Please try again.')
+            console.error('Buy now failed', e)
+            alert('Failed to start checkout. Please try again.')
         }
     }
 

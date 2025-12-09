@@ -24,7 +24,7 @@ const CTA = () => {
                 className='absolute left-0 top-0 w-full h-full object-cover'
             />
             <div className='relative w-full h-full flex flex-col justify-center items-center gap-4 lg:gap-6'>
-                <h1 className='font-astrid text-[48px] lg:text-[72px] leading-14 lg:leading-[90%] text-center '>Join the Glow Club</h1>
+                <h1 className='font-astrid text-[48px] lg:text-[72px] leading-14 lg:leading-[90%] text-center '><a href='#'>Join the Glow Club</a></h1>
                 <p className='font-montserrat font-medium text-[16px] lg:text-[18px] text-center'>
                     Sign up for self-care tips, exclusive offers, and skincare drops.
                 </p>

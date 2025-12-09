@@ -4,10 +4,30 @@ export const dynamic = 'force-dynamic'
 import Stripe from 'stripe'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
+import { cookies } from 'next/headers'
 import { getEnvVar, getOriginFromRequestUrl } from '@/lib/config'
 import { json, errorJson } from '@/lib/http'
+import { productData } from '@/utils/index'
 
-const stripe = new Stripe(getEnvVar('STRIPE_SECRET_KEY'))
+// Initialize Stripe with validation
+let stripe
+try {
+	const stripeKey = getEnvVar('STRIPE_SECRET_KEY')
+	if (!stripeKey || !stripeKey.trim()) {
+		throw new Error('STRIPE_SECRET_KEY is not set or is empty')
+	}
+	// Remove any whitespace that might cause issues
+	const cleanKey = stripeKey.trim()
+	// Validate key format (should start with sk_test_ or sk_live_)
+	if (!cleanKey.startsWith('sk_test_') && !cleanKey.startsWith('sk_live_')) {
+		throw new Error('STRIPE_SECRET_KEY format is invalid. Must start with sk_test_ or sk_live_')
+	}
+	stripe = new Stripe(cleanKey)
+} catch (err) {
+	console.error('Failed to initialize Stripe:', err.message)
+	// Create a dummy stripe instance to prevent crashes, but it will fail on API calls
+	stripe = new Stripe('sk_test_invalid')
+}
 
 function getSupabaseAdmin() {
 	const url = getEnvVar('NEXT_PUBLIC_SUPABASE_URL')
@@ -53,16 +73,16 @@ export async function POST(request) {
 		// Authenticate the incoming request using Supabase server client (reads cookies)
 		let userId = null
 		try {
+			// Use Next.js cookies() helper for better cookie handling
+			const cookieStore = await cookies()
+			
 			const supabaseServer = createServerClient(
 				getEnvVar('NEXT_PUBLIC_SUPABASE_URL'),
 				getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
 				{
 					cookies: {
 						get(name) {
-							const cookieHeader = request.headers.get('cookie') || ''
-							const match = cookieHeader.split(/;\s*/).find(c => c.startsWith(name + '='))
-							if (!match) return undefined
-							return decodeURIComponent(match.split('=')[1])
+							return cookieStore.get(name)?.value
 						},
 						set() { /* not needed server-side */ },
 						remove() { /* not needed server-side */ },
@@ -72,14 +92,51 @@ export async function POST(request) {
 			const { data: authData, error: authErr } = await supabaseServer.auth.getUser()
 			if (authErr) {
 				console.error('Supabase auth.getUser error', authErr)
+				// Log for debugging
+				if (process.env.NODE_ENV === 'development') {
+					console.log('Auth error details:', authErr.message)
+				}
 			}
 			userId = authData?.user?.id ?? null
 		} catch (e) {
 			console.error('Supabase server auth failed in create-checkout-session:', e)
-			return errorJson('Unauthorized', 401)
+			// If cookies() fails, try fallback to manual cookie parsing
+			try {
+				const cookieHeader = request.headers.get('cookie') || ''
+				if (cookieHeader) {
+					const supabaseServer = createServerClient(
+						getEnvVar('NEXT_PUBLIC_SUPABASE_URL'),
+						getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
+						{
+							cookies: {
+								get(name) {
+									if (!cookieHeader) return undefined
+									const cookies = cookieHeader.split(';').map(c => c.trim())
+									const cookie = cookies.find(c => c.startsWith(name + '='))
+									if (!cookie) return undefined
+									const value = cookie.substring(name.length + 1)
+									try {
+										return decodeURIComponent(value)
+									} catch {
+										return value
+									}
+								},
+								set() { /* not needed */ },
+								remove() { /* not needed */ },
+							},
+						}
+					)
+					const { data: authData } = await supabaseServer.auth.getUser()
+					userId = authData?.user?.id ?? null
+				}
+			} catch (fallbackError) {
+				console.error('Fallback auth also failed:', fallbackError)
 		}
+		}
+		
+		// For now, require authentication - but provide better error message
 		if (!userId) {
-			return errorJson('Unauthorized', 401)
+			return errorJson('Authentication required. Please sign in to continue with checkout.', 401)
 		}
 
 		const payload = await request.json().catch(() => ({}))
@@ -112,87 +169,120 @@ export async function POST(request) {
 		}
 
 		const productMap = new Map((products || []).map((product) => [ product.id, product ]))
+		
+		// Enhance productMap with productData for missing products
+		productIds.forEach((id) => {
+			if (!productMap.has(id) && productData[id]) {
+				// Add product from productData to the map
+				productMap.set(id, {
+					id: id,
+					name: productData[id].name,
+					price: productData[id].price, // Use price from productData
+					image: productData[id].image,
+				})
+			}
+		})
+		
 		const missingProductIds = productIds.filter((id) => !productMap.has(id))
-		let fallbackPriceId = process.env.SPIN_CREDIT_PRICE_ID || process.env.NEXT_PUBLIC_SPIN_CREDIT_PRICE_ID || null
+		// Skip Stripe fallback price retrieval since we have productData fallback
+		// This avoids unnecessary Stripe API calls and potential auth errors
+		let fallbackPriceId = null
 		let fallbackPrice = null
 		if (missingProductIds.length > 0) {
-			if (!fallbackPriceId) {
-				return errorJson('One or more products not found', 400)
-			}
-			try {
-				fallbackPrice = await stripe.prices.retrieve(fallbackPriceId)
-			} catch (err) {
-				// If Stripe auth fails (invalid key) or other price retrieval errors occur,
-				// log the error and disable the Stripe price fallback so we can rely on
-				// client-supplied item prices instead. Do not crash the whole request.
-				console.error('Failed to retrieve fallback price', err)
-				// If this is an authentication error, the secret key may be invalid.
-				if (err && (err.type === 'StripeAuthenticationError' || err.statusCode === 401)) {
-					console.warn('Stripe authentication failed when retrieving fallback price. Please verify STRIPE_SECRET_KEY in your environment.')
-				}
-				fallbackPrice = null
-				fallbackPriceId = null
-				// disable using the configured fallback price id since retrieval failed
-				// (this will force using client-supplied `price` or error later)
-				// Note: we don't `return` here to allow client price fallbacks.
-				
-			}
+			console.warn('Some products not found in database or productData:', missingProductIds)
+			// We'll rely on client-supplied prices or productData, not Stripe fallback
 		}
 
 		const fallbackProductName = process.env.SPIN_CREDIT_PRODUCT_NAME || 'Spin Credits'
 
 		const orderItems = items.map((item) => {
 			const product = productMap.get(item.productId)
+			// Check productData as additional fallback
+			const productFromData = productData[item.productId]
+			
 			if (product) {
+				// Use productData price if available (authoritative source)
+				const finalPrice = productFromData && typeof productFromData.price === 'number' 
+					? productFromData.price 
+					: Number(product.price || 0)
 				return {
 					product_id: product.id,
 					name: product.name,
-					price: Number(product.price || 0),
+					price: finalPrice,
 					image: product.image,
 					qty: item.quantity,
 				}
 			}
 			// fallback to client-supplied item metadata when product row is missing
+			// Prioritize productData price over client-supplied price
+			const finalPrice = productFromData && typeof productFromData.price === 'number'
+				? productFromData.price
+				: (typeof item.price === 'number' ? item.price : (fallbackPrice?.unit_amount ? Number(fallbackPrice.unit_amount) / 100 : 0))
+			
 			return {
 				product_id: item.productId,
-				name: item.name || fallbackProductName,
-				price: typeof item.price === 'number' ? item.price : (fallbackPrice?.unit_amount ? Number(fallbackPrice.unit_amount) / 100 : 0),
-				image: item.image || null,
+				name: item.name || productFromData?.name || fallbackProductName,
+				price: finalPrice,
+				image: item.image || productFromData?.image || null,
 				qty: item.quantity,
 			}
 		})
 
 		const lineItems = items.map((item) => {
 			const product = productMap.get(item.productId)
-			if (product) {
-				const unitAmount = Math.round(Number(product.price || 0) * 100)
+			// Check productData as authoritative source for prices
+			const productFromData = productData[item.productId]
+			
+			// Determine the price to use (prioritize productData)
+			let priceToUse = null
+			if (productFromData && typeof productFromData.price === 'number') {
+				priceToUse = productFromData.price
+			} else if (product && typeof product.price === 'number') {
+				priceToUse = product.price
+			} else if (typeof item.price === 'number' && item.price >= 0) {
+				priceToUse = item.price
+			}
+			
+			// If we have a valid price, use it
+			if (priceToUse !== null && priceToUse >= 0) {
+				const unitAmount = Math.round(Number(priceToUse) * 100)
 				if (!Number.isFinite(unitAmount) || unitAmount <= 0) {
-					throw new Error(`Invalid product or price for ${item.productId}`)
+					throw new Error(`Invalid price for product ${item.productId}: ${priceToUse}`)
 				}
+				
+				const productName = product?.name || productFromData?.name || item.name || fallbackProductName
+				let productImage = product?.image || productFromData?.image || item.image
+				
+				// Stripe requires absolute URLs for images, not relative paths
+				// Convert relative paths to absolute URLs
+				if (productImage) {
+					// If it's already a full URL (starts with http:// or https://), use it as is
+					if (productImage.startsWith('http://') || productImage.startsWith('https://')) {
+						// Already a full URL, use as is
+					} else if (productImage.startsWith('/')) {
+						// Relative path starting with /, convert to absolute URL
+						const origin = getOriginFromRequestUrl(request.url)
+						productImage = `${origin}${productImage}`
+					} else {
+						// Relative path without /, add origin and /
+						const origin = getOriginFromRequestUrl(request.url)
+						productImage = `${origin}/${productImage}`
+					}
+				}
+				
 				return {
 					price_data: {
 						currency: 'usd',
 						product_data: {
-							name: product.name,
-							images: product.image ? [ product.image ] : undefined,
+							name: productName,
+							images: productImage ? [ productImage ] : undefined,
 						},
 						unit_amount: unitAmount,
 					},
 					quantity: item.quantity,
 				}
 			}
-			// If client supplied a price, use inline price_data fallback (preferred)
-			if (typeof item.price === 'number' && item.price >= 0) {
-				const unitAmount = Math.round(Number(item.price) * 100)
-				return {
-					price_data: {
-						currency: 'usd',
-						product_data: { name: item.name || fallbackProductName, images: item.image ? [ item.image ] : undefined },
-						unit_amount: unitAmount,
-					},
-					quantity: item.quantity,
-				}
-			}
+			
 			// fallback: use configured Stripe Price ID if available and retrieval succeeded
 			if (fallbackPriceId && fallbackPrice) {
 				return {
@@ -200,9 +290,10 @@ export async function POST(request) {
 					quantity: item.quantity,
 				}
 			}
+			
 			// If all else fails, log clear error
-			console.error(`Unable to resolve price for product ${item.productId}. No product row, no client price, and no valid Stripe fallback price.`)
-			throw new Error(`Unable to resolve price for product ${item.productId}. Please ensure products table is created or client sends a price.`)
+			console.error(`Unable to resolve price for product ${item.productId}. No productData, no product row, no client price, and no valid Stripe fallback price.`)
+			throw new Error(`Unable to resolve price for product ${item.productId}. Please ensure productData has this product or client sends a price.`)
 		})
 
 		const itemsSubtotalCents = lineItems.reduce((sum, lineItem) => {
@@ -231,36 +322,73 @@ export async function POST(request) {
 			})
 		}
 
+		// Build order payload - use minimal required fields first
+		// We'll add orderId after the record is created to avoid schema issues
 		const supabaseOrderPayload = {
-			orderId: `STR-${Date.now()}`,
 			status: 'pending',
 			items: orderItems,
 			subtotal: itemsSubtotalCents / 100,
 			shipping: shippingCents / 100,
 			discount: discountCents / 100,
 			total: (itemsSubtotalCents - discountCents + shippingCents) / 100,
-			couponCode: payload.couponCode || null,
-			customerEmail: payload.customerEmail || null,
-			customerName: payload.customerName || null,
-			createdAt: new Date().toISOString(),
 			provider: 'stripe',
-			providerPayload: null,
 			user_id: userId,
 			product_id: items[0]?.productId || null,
-			session_id: null,
-			payment_intent: null,
-			amount: (itemsSubtotalCents - discountCents + shippingCents) / 100,
 		}
+		
+		// Only add optional fields if they have values (to avoid column errors)
+		if (payload.couponCode) {
+			supabaseOrderPayload.couponCode = payload.couponCode
+		}
+		if (payload.customerEmail) {
+			supabaseOrderPayload.customerEmail = payload.customerEmail
+		}
+		if (payload.customerName) {
+			supabaseOrderPayload.customerName = payload.customerName
+		}
+		
+		// Remove null/undefined values
+		const cleanedPayload = {}
+		Object.keys(supabaseOrderPayload).forEach(key => {
+			if (supabaseOrderPayload[key] !== null && supabaseOrderPayload[key] !== undefined) {
+				cleanedPayload[key] = supabaseOrderPayload[key]
+			}
+		})
 
 		const { data: orderRecord, error: orderError } = await supabase
 			.from('orders')
-			.insert(supabaseOrderPayload)
+			.insert(cleanedPayload)
 			.select()
 			.single()
 
 		if (orderError) {
 			console.error('Supabase order insert error', orderError)
-			return errorJson('Failed to create order record', 500)
+			// Provide more helpful error message
+			if (orderError.code === 'PGRST204') {
+				console.error('Column mismatch detected. Missing column:', orderError.message)
+				console.error('Attempted to insert columns:', Object.keys(cleanedPayload))
+				const missingColumn = orderError.message.match(/'([^']+)'/)?.[1] || 'unknown'
+				return errorJson(`Database schema mismatch: Column '${missingColumn}' not found. Please run create-orderId-column.sql in your Supabase SQL Editor.`, 500)
+			}
+			return errorJson(`Failed to create order record: ${orderError.message}`, 500)
+		}
+		
+		// Try to add orderId after creation (non-blocking if column doesn't exist)
+		const orderIdValue = `STR-${Date.now()}`
+		if (orderRecord?.id) {
+			try {
+				const { error: updateOrderIdError } = await supabase
+					.from('orders')
+					.update({ orderId: orderIdValue })
+					.eq('id', orderRecord.id)
+				if (updateOrderIdError) {
+					// Silently fail - orderId column might not exist, that's okay
+					console.warn('Could not update orderId (column may not exist):', updateOrderIdError.message)
+				}
+			} catch (err) {
+				// Silently fail - orderId column might not exist, that's okay
+				console.warn('Could not update orderId (column may not exist):', err.message)
+			}
 		}
 
 		const origin = getOriginFromRequestUrl(request.url)
@@ -281,7 +409,10 @@ export async function POST(request) {
 			...sanitizeMetadata(payload.metadata),
 		}
 
-		const session = await stripe.checkout.sessions.create({
+		// Create Stripe checkout session with error handling
+		let session
+		try {
+			session = await stripe.checkout.sessions.create({
 			mode: 'payment',
 			payment_method_types: [ 'card' ],
 			line_items: lineItems,
@@ -290,14 +421,29 @@ export async function POST(request) {
 			metadata,
 			discounts: discounts.length ? discounts : undefined,
 		})
+		} catch (stripeError) {
+			console.error('Stripe checkout session creation failed:', stripeError)
+			// Provide helpful error message for authentication errors
+			if (stripeError.type === 'StripeAuthenticationError' || stripeError.statusCode === 401) {
+				return errorJson(`Stripe authentication failed: Invalid API key. Please verify your STRIPE_SECRET_KEY in your .env file. Make sure it's a valid key starting with 'sk_test_' (for test mode) or 'sk_live_' (for live mode), and that there's no extra whitespace.`, 500)
+			}
+			// Re-throw other Stripe errors
+			throw stripeError
+		}
 
 		const orderIdentifier = orderRecord?.id ? { id: orderRecord.id } : { orderId: orderRecord?.orderId }
+		// Update with session info - try orderId but don't fail if column doesn't exist
+		const updatePayload = {
+			session_id: session.id,
+		}
+		// Only try to update orderId if we think the column exists (non-blocking)
+		try {
+			updatePayload.orderId = session.id
+		} catch {}
+		
 		const { error: updateError } = await supabase
 			.from('orders')
-			.update({
-				session_id: session.id,
-				orderId: session.id,
-			})
+			.update(updatePayload)
 			.match(orderIdentifier)
 
 		if (updateError) {
