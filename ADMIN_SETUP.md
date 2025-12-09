@@ -5,11 +5,7 @@
 1. Go to your Supabase Dashboard
 2. Navigate to **Authentication** → **Users**
 3. Click **"Add user"**
-4. Enter the following details:
-   - **Email**: `admin@hagi-aesthetics.com`
-   - **Password**: `hagiAdmin024`
-   - **Email Confirm**: Check this box
-5. Click **"Create user"**
+
 
 ## 2. Set Up Database Schema
 
@@ -42,12 +38,12 @@ CREATE POLICY "Public read access" ON products
 -- Allow admin full access
 CREATE POLICY "Admin full access" ON products
   FOR ALL USING (
-    auth.jwt() ->> 'email' = 'admin@hagi-aesthetics.com'
+    auth.jwt() ->> 'email' = 'admin@hagiaesthetics.store'
   );
 
 -- Insert sample products
 INSERT INTO products (name, productno, description, description2, productdetails, price, image) VALUES
-('Hagi''s Whipped Velvet Elixir', 'product 01', 'This premium product is crafted by Hagi Aesthetics, ensuring you receive a luxurious experience. The 8 oz (250 ml) bottle is perfect for those looking to enhance their skincare routine. The blend of Lavender and Vanilla offers a soothing aroma.', 'Crafted by Hagi Aesthetics, the Hagi''s Whipped Velvet Elixir is a premium skincare essential that enhances your daily self-care. Designed to deeply moisturize, soothe, and soften your skin, this luxurious butter delivers a rich, creamy feel with every application. The Lavender and Vanilla aroma helps you relax and unwind, making it perfect for both morning and night routines.', 'Product Details', 29.99, '/product1.png'),
+('Hagi''s Whipped Velvet Elixir', 'product 01', 'This premium product is crafted by Hagi Aesthetics, ensuring you receive a luxurious experience. The 8 oz (250 ml) bottle is perfect for those looking to enhance their skincare routine. The blend of Lavender and Vanilla offers a soothing aroma.', 'Crafted by Hagi Aesthetics, the Hagi''s Whipped Velvet Elixir is a premium skincare essential that enhances your daily self-care. Designed to deeply moisturize, soothe, and soften your skin, this luxurious butter delivers a rich, creamy feel with every application. The Lavender and Vanilla aroma helps you relax and unwind, making it perfect for both morning and night routines.', 'Product Details', 6.99, '/product1.png'),
 ('Suck It Up Body Butter', 'product 02', 'Indulge in daily luxury with this gentle formula designed to hydrate and refresh your skin. Infused with the calming scent of Strawberry Vanilla for a spa-like experience.', 'Crafted by Hagi Aesthetics, the Suck It Up Body Butter is a premium skincare essential that enhances your daily self-care. Designed to deeply moisturize, soothe, and soften your skin, this luxurious butter delivers a rich, creamy feel with every application. The Lavender and Vanilla aroma helps you relax and unwind, making it perfect for both morning and night routines.', 'Product Details', 24.99, '/product2.png'),
 ('Vietnamese Hair Vendor List', 'product 03', 'A carefully curated Vendor List that gives you access to verified beauty and lifestyle suppliers — the same ones successful small business owners trust. You''ll get: 📍 Direct contact details of suppliers (no middlemen) 🌐 Links to websites & social platforms 💰 Info on minimum order quantities (MOQs) 🚚 Shipping & fulfillment info (domestic & international)', 'A downloadable PDF with: 🏭 Direct contact info of verified Hair vendors 🌐 Links to their websites and social pages 📦 Minimum order quantities & pricing info 🚛 Shipping/fulfillment details (US & international) 💬 Tips on vendor communication & negotiation', '✅What You''ll Get:', 39.00, '/product3.png');
 ```
@@ -67,7 +63,7 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 1. Start your development server: `npm run dev`
 2. Navigate to: `http://localhost:3000/admin/login`
 3. Login with:
-   - **Email**: `admin@hagi-aesthetics.com`
+   - **Email**: `admin@hagiaesthetics.store`
    - **Password**: `hagiAdmin024`
 
 ## 5. Admin Features

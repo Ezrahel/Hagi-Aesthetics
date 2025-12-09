@@ -29,7 +29,7 @@ export default function AdminLogin() {
 
             // Check if user is admin
             const { data: { user } } = await supabase.auth.getUser()
-            if (user?.email === 'admin@hagi-aesthetics.com') {
+            if (user?.email === 'admin@hagiaesthetics.store') {
                 // Set admin session cookie
                 document.cookie = 'admin-session=true; path=/; max-age=86400' // 24 hours
                 router.push('/admin')

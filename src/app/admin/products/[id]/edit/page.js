@@ -61,7 +61,7 @@ export default function EditProduct({ params }) {
     useEffect(() => {
         const checkAuth = async () => {
             const { data: { user } } = await supabase.auth.getUser()
-            if (!user || user.email !== 'admin@hagi-aesthetics.com') {
+            if (!user || user.email !== 'admin@hagiaesthetics.store') {
                 router.push('/admin/login')
                 return
             }
