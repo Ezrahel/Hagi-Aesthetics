@@ -397,10 +397,10 @@ export async function POST(request) {
 		const [couponResult] = await Promise.allSettled([
 			discountCents > 0 
 				? stripe.coupons.create({
-					amount_off: discountCents,
-					currency: 'usd',
-					duration: 'once',
-				})
+				amount_off: discountCents,
+				currency: 'usd',
+				duration: 'once',
+			})
 				: Promise.resolve(null)
 		])
 		

@@ -27,10 +27,10 @@ const Page = () => {
       const Lenis = (await import('lenis')).default;
       lenis = new Lenis();
       
-      const raf = (time) => {
-        lenis.raf(time);
+    const raf = (time) => {
+      lenis.raf(time);
         rafId = requestAnimationFrame(raf);
-      };
+    };
       rafId = requestAnimationFrame(raf);
     };
     
