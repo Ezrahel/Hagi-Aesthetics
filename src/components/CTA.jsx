@@ -17,7 +17,7 @@ const CTA = () => {
     return (
         <div className='w-full h-[50Vh] relative text-pink px-5 lg:px-0'>
             <Image
-                src="/img_.jpeg"
+                src="/footer2.png"
                 alt="footer"
                 width={1000}
                 height={1000}
