@@ -281,27 +281,29 @@ export default async function SuccessPage({ searchParams }) {
 		: 0
 
 	if (paymentStatus === 'paid') {
-		// If it's a spin credit purchase, update user metadata
+		// If it's a spin credit purchase, update user metadata directly
 		if (isSpinCredit && userId) {
 			try {
-				// Use environment variable or default to production URL
-				const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || 'https://hagiaesthetics.store'
-				const apiUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`
+				const supabase = getSupabaseAdmin()
 				
-				// Fire-and-forget: update credits in background (non-blocking)
-				setImmediate(() => {
-					fetch(`${apiUrl}/api/update-spin-credits`, {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({
-							userId,
-							amountCents: session.amount_total
-						})
-					}).catch(err => {
-						console.error('Failed to update spin credits:', err)
+				// Get current user metadata
+				const { data: userData, error: fetchError } = await supabase.auth.admin.getUserById(userId)
+				
+				if (!fetchError && userData?.user) {
+					const currentMeta = userData.user.user_metadata || {}
+					const currentCredits = Number.isFinite(currentMeta.paid_credits_cents) ? currentMeta.paid_credits_cents : 0
+					const newCredits = currentCredits + session.amount_total
+					
+					// Update user metadata with new credits
+					await supabase.auth.admin.updateUserById(userId, {
+						user_metadata: {
+							...currentMeta,
+							paid_credits_cents: newCredits
+						}
 					})
-				})
+				}
 			} catch (err) {
+				// Non-blocking: log error but don't fail the page
 				console.error('Spin credits update error:', err)
 			}
 		}

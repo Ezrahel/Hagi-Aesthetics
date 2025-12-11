@@ -3,9 +3,20 @@ import { createClient } from '@supabase/supabase-js'
 import { getEnvVar } from '@/lib/config'
 
 function getSupabaseAdmin() {
-	const url = getEnvVar('NEXT_PUBLIC_SUPABASE_URL')
-	const key = getEnvVar('SUPABASE_SERVICE_ROLE_KEY')
-	return createClient(url, key)
+	const url = getEnvVar('NEXT_PUBLIC_SUPABASE_URL', false) || process.env.NEXT_PUBLIC_SUPABASE_URL
+	const key = getEnvVar('SUPABASE_SERVICE_ROLE_KEY', false) || process.env.SUPABASE_SERVICE_ROLE_KEY
+	
+	if (!url || !key) {
+		throw new Error('Missing Supabase credentials')
+	}
+	
+	// Create admin client with service role key - this bypasses RLS
+	return createClient(url, key, {
+		auth: {
+			autoRefreshToken: false,
+			persistSession: false
+		}
+	})
 }
 
 export async function POST(request) {
