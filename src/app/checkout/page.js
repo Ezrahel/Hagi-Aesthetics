@@ -32,7 +32,7 @@ const Page = () => {
         } catch {
             setItems([])
         }
-    }, [])
+    }, [router])
 
     const subtotal = useMemo(() => items.reduce((sum, i) => sum + (i.price || 0) * (i.qty || 1), 0), [items])
     const shipping = 4.99

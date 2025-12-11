@@ -1,5 +1,6 @@
 import Stripe from 'stripe'
 import Link from 'next/link'
+import Image from 'next/image'
 // switched from Clerk to Supabase auth; we infer linked user from order record
 import { createClient } from '@supabase/supabase-js'
 import { getEnvVar } from '@/lib/config'
@@ -271,22 +272,174 @@ export default async function SuccessPage({ searchParams }) {
 
 	const paymentStatus = session?.payment_status
 	let order = null
+	const isSpinCredit = session?.metadata?.source === 'spinwheel_topup'
+	const userId = session?.metadata?.user_id || null
+
+	// Calculate spin credits purchased (amount in cents / 100 = number of $1 spins)
+	const spinCreditsPurchased = typeof session.amount_total === 'number' 
+		? Math.floor(session.amount_total / 100) 
+		: 0
 
 	if (paymentStatus === 'paid') {
+		// If it's a spin credit purchase, update user metadata
+		if (isSpinCredit && userId) {
+			try {
+				// Use environment variable or default to production URL
+				const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || 'https://hagiaesthetics.store'
+				const apiUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`
+				
+				// Fire-and-forget: update credits in background (non-blocking)
+				setImmediate(() => {
+					fetch(`${apiUrl}/api/update-spin-credits`, {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							userId,
+							amountCents: session.amount_total
+						})
+					}).catch(err => {
+						console.error('Failed to update spin credits:', err)
+					})
+				})
+			} catch (err) {
+				console.error('Spin credits update error:', err)
+			}
+		}
+
 		// Parallelize order finalization and email sending (non-blocking)
 		const deliveryInfo = session?.metadata?.deliveryInfo || null
 		
-		// Finalize order first (needed for page display)
-		order = await finalizeOrder(sessionId, typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id, session.amount_total)
+		// Only finalize order if it's not a spin credit (spin credits may not have orders)
+		if (!isSpinCredit) {
+			order = await finalizeOrder(sessionId, typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id, session.amount_total)
 
-		// Fire email send in background - use setImmediate for true non-blocking
-		setImmediate(() => {
-			sendOrderEmail({ order, session, deliveryInfo }).catch((err) => {
-				console.error('Background sendOrderEmail error:', err)
+			// Fire email send in background - use setImmediate for true non-blocking
+			setImmediate(() => {
+				sendOrderEmail({ order, session, deliveryInfo }).catch((err) => {
+					console.error('Background sendOrderEmail error:', err)
+				})
 			})
-		})
+		}
 	}
 
+	// Render spin credit success page
+	if (isSpinCredit) {
+		return (
+			<div className="min-h-screen bg-gradient-to-br from-lavender via-pink/10 to-lavender flex flex-col">
+				{/* Go Home Button - Top Left */}
+				<div className="absolute top-6 left-6 z-10">
+					<Link 
+						href="https://hagiaesthetics.store"
+						className="inline-flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-white transition-all duration-200 text-pink font-satoshi font-medium text-sm"
+					>
+						<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+						</svg>
+						Go Home
+					</Link>
+				</div>
+
+				{/* Main Content */}
+				<div className="flex-1 flex flex-col items-center justify-center px-6 py-20 text-center">
+					{paymentStatus === 'paid' ? (
+						<>
+							{/* Success Icon/Animation */}
+							<div className="relative mb-8">
+								<div className="w-32 h-32 lg:w-40 lg:h-40 mx-auto bg-pink rounded-full flex items-center justify-center shadow-2xl animate-pulse">
+									<svg className="w-16 h-16 lg:w-20 lg:h-20 text-lavender" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+									</svg>
+								</div>
+								{/* Decorative circles */}
+								<div className="absolute -top-4 -right-4 w-8 h-8 bg-pink/30 rounded-full animate-ping"></div>
+								<div className="absolute -bottom-4 -left-4 w-6 h-6 bg-pink/20 rounded-full animate-pulse"></div>
+							</div>
+
+							{/* Title */}
+							<h1 className="font-astrid text-4xl lg:text-6xl text-pink mb-4">
+								Payment Successful! 🎉
+							</h1>
+
+							{/* Subtitle */}
+							<p className="font-satoshi text-lg lg:text-xl text-gray-700 max-w-2xl mb-8">
+								Your spin credits have been added to your account
+							</p>
+
+							{/* Credits Card */}
+							<div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-2xl p-8 lg:p-12 max-w-md w-full mb-8 border-2 border-pink/20">
+								<div className="flex flex-col items-center gap-4">
+									<div className="w-20 h-20 bg-gradient-to-br from-pink to-pink/70 rounded-full flex items-center justify-center mb-2">
+										<Image 
+											src="/spinwheel1.png" 
+											alt="Spin Wheel" 
+											width={60} 
+											height={60}
+											className="object-contain"
+										/>
+									</div>
+									<p className="font-satoshi text-sm uppercase text-gray-500 tracking-wider">Credits Added</p>
+									<p className="font-astrid text-5xl lg:text-6xl text-pink font-bold">
+										{spinCreditsPurchased}
+									</p>
+									<p className="font-satoshi text-gray-600">
+										{spinCreditsPurchased === 1 ? 'Spin Credit' : 'Spin Credits'}
+									</p>
+									<div className="w-full h-px bg-gradient-to-r from-transparent via-pink/30 to-transparent my-4"></div>
+									<p className="font-satoshi text-sm text-gray-500">
+										Amount Paid: <span className="font-semibold text-pink">${(session.amount_total / 100).toFixed(2)}</span>
+									</p>
+								</div>
+							</div>
+
+							{/* CTA Buttons */}
+							<div className="flex flex-col sm:flex-row gap-4 items-center justify-center">
+								<Link 
+									href="https://hagiaesthetics.store"
+									className="px-8 py-4 bg-pink text-lavender rounded-full font-montserrat font-bold text-lg uppercase shadow-lg hover:bg-pink/90 transition-all duration-200 hover:scale-105"
+								>
+									Start Spinning
+								</Link>
+								<Link 
+									href="https://hagiaesthetics.store/shop"
+									className="px-8 py-4 bg-white text-pink border-2 border-pink rounded-full font-montserrat font-bold text-lg uppercase shadow-lg hover:bg-pink/5 transition-all duration-200"
+								>
+									Shop Now
+								</Link>
+							</div>
+
+							{/* Info Text */}
+							<p className="mt-8 font-satoshi text-sm text-gray-500 max-w-md">
+								Your credits are ready to use! Head back to the spin wheel to start playing.
+							</p>
+						</>
+					) : (
+						<>
+							<div className="w-24 h-24 mx-auto mb-6 bg-yellow-100 rounded-full flex items-center justify-center">
+								<svg className="w-12 h-12 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+								</svg>
+							</div>
+							<h1 className="font-astrid text-3xl lg:text-4xl text-pink mb-4">
+								Payment Pending
+							</h1>
+							<p className="font-satoshi text-gray-700 max-w-xl mb-8">
+								Your payment is currently marked as <span className="font-semibold uppercase">{paymentStatus}</span>. 
+								We will update your spin credits once the payment is complete.
+							</p>
+							<Link 
+								href="https://hagiaesthetics.store"
+								className="px-8 py-4 bg-pink text-lavender rounded-full font-montserrat font-bold text-lg uppercase shadow-lg hover:bg-pink/90 transition-all duration-200"
+							>
+								Go Home
+							</Link>
+						</>
+					)}
+				</div>
+			</div>
+		)
+	}
+
+	// Regular order success page
 	return (
 		<div className="min-h-[70vh] flex flex-col items-center justify-center gap-6 px-6 text-center">
 			<h1 className="text-3xl font-astrid text-pink">Thank You!</h1>
