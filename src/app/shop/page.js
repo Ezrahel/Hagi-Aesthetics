@@ -53,7 +53,7 @@ const Page = () => {
     }
 
     return (
-        <div className='px-5 lg:px-24 py-16 text-pink'>
+        <div className='px-5 lg:px-24 py-16 lg:pt-32 text-pink'>
             <h1 className='font-astrid text-[32px] lg:text-[50px] mb-8'>Shop</h1>
             <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8'>
                 {products.map((p) => (

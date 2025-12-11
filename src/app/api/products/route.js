@@ -17,11 +17,14 @@ export async function GET() {
 
     return NextResponse.json({ products: data || [] })
   } catch (error) {
-    console.error('Error fetching products:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch products' },
-      { status: 500 }
-    )
+    console.error('Error fetching products:', {
+      message: error?.message || 'Unknown error',
+      details: error?.toString(),
+      hint: error?.hint || '',
+      code: error?.code || ''
+    })
+    // Return empty array instead of error to prevent page breakage
+    return NextResponse.json({ products: [] })
   }
 }
 

@@ -146,20 +146,22 @@ const Header = () => {
                         className='w-[45px] lg:w-[85px] h-auto'
                     />
                 </Link>
-                <div className={`hidden lg:flex font-montserrat font-bold text-[14px] uppercase gap-[10px] ${getTextColor()}`}>
+                <nav className="hidden lg:flex font-montserrat font-bold text-[14px] uppercase gap-[10px]" style={{ opacity: 1, visibility: 'visible' }}>
                     {navItems.map((item) => (
                         <Link
                             key={item.path}
                             href={item.path}
-                            className={`p-[10px] border-b-2 ${pathname === item.path
+                            prefetch={true}
+                            className={`p-[10px] border-b-2 transition-colors duration-200 ${pathname === item.path
                                 ? 'text-pink border-pink'
-                                : 'border-transparent'
+                                : 'text-black border-transparent hover:text-pink/80'
                                 }`}
+                            style={{ opacity: 1, visibility: 'visible', display: 'block' }}
                         >
                             {item.name}
                         </Link>
                     ))}
-                </div>
+                </nav>
 
                 <div className='flex justify-center items-center gap-5'>
                     <Link href="/cart" className='relative'>
