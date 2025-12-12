@@ -282,6 +282,7 @@ export default async function SuccessPage({ searchParams }) {
 
 	if (paymentStatus === 'paid') {
 		// If it's a spin credit purchase, update user metadata directly
+		// Note: Webhook is the primary mechanism, this is a fallback
 		if (isSpinCredit && userId) {
 			try {
 				const supabase = getSupabaseAdmin()
@@ -291,16 +292,29 @@ export default async function SuccessPage({ searchParams }) {
 				
 				if (!fetchError && userData?.user) {
 					const currentMeta = userData.user.user_metadata || {}
-					const currentCredits = Number.isFinite(currentMeta.paid_credits_cents) ? currentMeta.paid_credits_cents : 0
-					const newCredits = currentCredits + session.amount_total
 					
-					// Update user metadata with new credits
-					await supabase.auth.admin.updateUserById(userId, {
-						user_metadata: {
-							...currentMeta,
-							paid_credits_cents: newCredits
-						}
-					})
+					// Check if this session has already been processed (prevent double-crediting)
+					const processedSessions = Array.isArray(currentMeta.processed_spin_sessions) 
+						? currentMeta.processed_spin_sessions 
+						: []
+					
+					if (processedSessions.includes(sessionId)) {
+						console.log(`Session ${sessionId} already processed, skipping credit update in success page`)
+					} else {
+						const currentCredits = Number.isFinite(currentMeta.paid_credits_cents) ? currentMeta.paid_credits_cents : 0
+						const newCredits = currentCredits + session.amount_total
+						
+						// Update user metadata with new credits and mark session as processed
+						await supabase.auth.admin.updateUserById(userId, {
+							user_metadata: {
+								...currentMeta,
+								paid_credits_cents: newCredits,
+								processed_spin_sessions: [...processedSessions, sessionId]
+							}
+						})
+						
+						console.log(`Spin credits updated via success page fallback for user ${userId}, session ${sessionId}`)
+					}
 				}
 			} catch (err) {
 				// Non-blocking: log error but don't fail the page
