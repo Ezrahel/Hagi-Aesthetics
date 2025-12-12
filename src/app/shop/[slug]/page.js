@@ -201,20 +201,20 @@ export default function ProductPage({ params }) {
                 <p className='font-satoshi text-[16px] lg:text-[20px]'>{product.description2}</p>
                 <div className='grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-5'>
                     <div className='w-full h-[100px] lg:h-[125px] flex flex-col lg:gap-1 justify-center px-4 lg:px-10 rounded-[16px] lg:rounded-[20px] border-2 border-pink'>
-                        <h3 className='font-satoshi font-black text-[14px] lg:text-[16px] uppercase'>Texture</h3>
-                        <p className='font-satoshi text-[14px] lg:text-[16px]'>Rich & creamy</p>
+                        <h3 className='font-satoshi font-black text-[14px] lg:text-[16px] uppercase'>Affordable</h3>
+                        <p className='font-satoshi text-[14px] lg:text-[16px]'>Very Affordable, not pricey!</p>
                     </div>
                     <div className='w-full h-[100px] lg:h-[125px] flex flex-col lg:gap-1 justify-center px-4 lg:px-10 rounded-[16px] lg:rounded-[20px] border-2 border-pink'>
-                        <h3 className='font-satoshi font-black text-[14px] lg:text-[16px] uppercase'>Scent Profile</h3>
-                        <p className='font-satoshi text-[14px] lg:text-[16px]'>Calming lavender with a hint of warm vanilla</p>
+                        <h3 className='font-satoshi font-black text-[14px] lg:text-[16px] uppercase'>Digital</h3>
+                        <p className='font-satoshi text-[14px] lg:text-[16px]'>PDF File</p>
                     </div>
                     <div className='w-full h-[100px] lg:h-[125px] flex flex-col lg:gap-1 justify-center px-4 lg:px-10 rounded-[16px] lg:rounded-[20px] border-2 border-pink'>
-                        <h3 className='font-satoshi font-black text-[14px] lg:text-[16px] uppercase'>Packaging</h3>
-                        <p className='font-satoshi text-[14px] lg:text-[16px]'>Sleek, minimal jar with secure lid</p>
+                        <h3 className='font-satoshi font-black text-[14px] lg:text-[16px] uppercase'>Vietnamese</h3>
+                        <p className='font-satoshi text-[14px] lg:text-[16px]'>Vietnamese hair vendor list</p>
                     </div>
                     <div className='w-full h-[100px] lg:h-[125px] flex flex-col lg:gap-1 justify-center px-4 lg:px-10 rounded-[16px] lg:rounded-[20px] border-2 border-pink'>
-                        <h3 className='font-satoshi font-black text-[14px] lg:text-[16px] uppercase'>Ideal for</h3>
-                        <p className='font-satoshi text-[14px] lg:text-[16px]'>Dry, sensitive, or dull skin</p>
+                        <h3 className='font-satoshi font-black text-[14px] lg:text-[16px] uppercase'>Raw Hair</h3>
+                        <p className='font-satoshi text-[14px] lg:text-[16px]'>High quality raw hair</p>
                     </div>
                 </div>
             </div>

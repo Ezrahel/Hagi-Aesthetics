@@ -5,7 +5,7 @@ import * as THREE from 'three'
 const Scene = () => {
     return (
         <>
-            <div className=' w-full h-[60vh] lg:h-screen fixed top-0 overflow-visible'>
+            <div className='hidden lg:block w-full h-[60vh] lg:h-screen fixed top-0 overflow-visible'>
                 <Canvas >
                     <ambientLight />
                     <pointLight position={[10, 10, 10]} />
