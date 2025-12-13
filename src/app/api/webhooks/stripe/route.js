@@ -131,9 +131,24 @@ export async function POST(request) {
 		if (event.type === 'checkout.session.completed') {
 			const session = event.data.object
 
+			// Debug logging
+			console.log('Webhook received checkout.session.completed:', {
+				sessionId: session.id,
+				paymentStatus: session.payment_status,
+				amountTotal: session.amount_total,
+				metadata: session.metadata
+			})
+
 			// Check if this is a spin credit purchase
 			const isSpinCredit = session?.metadata?.source === 'spinwheel_topup'
 			const userId = session?.metadata?.user_id
+
+			console.log('Spin credit check:', {
+				isSpinCredit,
+				userId,
+				paymentStatus: session.payment_status,
+				metadataSource: session?.metadata?.source
+			})
 
 			if (isSpinCredit && userId && session.payment_status === 'paid') {
 				const amountCents = typeof session.amount_total === 'number' 

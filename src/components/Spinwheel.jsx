@@ -16,43 +16,162 @@ const Spinwheel = () => {
     const [paidCreditsCents, setPaidCreditsCents] = useState(0)
     const [showBuyModal, setShowBuyModal] = useState(false)
 
-    // Load session & metadata
-    useEffect(() => {
-        const init = async () => {
-            const { data } = await supabase.auth.getUser()
+    // Function to refresh user data from server
+    const refreshUserData = async () => {
+        try {
+            // First try to get fresh data from API (this uses server-side session which has latest metadata)
+            try {
+                const response = await fetch('/api/user/credits', {
+                    method: 'GET',
+                    credentials: 'include',
+                })
+                if (response.ok) {
+                    const data = await response.json()
+                    if (data.success && data.credits) {
+                        setFreeSpinsLeft(data.credits.free_spins_left)
+                        setPaidCreditsCents(data.credits.paid_credits_cents)
+                        // Also update local user object if we have it
+                        if (user && data.user_metadata) {
+                            setUser({ ...user, user_metadata: data.user_metadata })
+                        }
+                        return
+                    }
+                }
+            } catch (apiErr) {
+                console.warn('API refresh failed, falling back to client refresh:', apiErr)
+            }
+            
+            // Fallback: refresh from client session
+            const { data, error } = await supabase.auth.getUser()
+            if (error) {
+                console.error('Error refreshing user data:', error)
+                return
+            }
             const currentUser = data?.user ?? null
             setUser(currentUser)
             if (currentUser) {
                 const meta = currentUser.user_metadata || {}
                 setFreeSpinsLeft(Number.isFinite(meta.free_spins_left) ? meta.free_spins_left : 3)
                 setPaidCreditsCents(Number.isFinite(meta.paid_credits_cents) ? meta.paid_credits_cents : 0)
+            } else {
+                setFreeSpinsLeft(3)
+                setPaidCreditsCents(0)
+            }
+        } catch (err) {
+            console.error('Error in refreshUserData:', err)
+        }
+    }
+
+    // Load session & metadata
+    useEffect(() => {
+        const init = async () => {
+            await refreshUserData()
+            // After refresh, check if we need to initialize free spins
+            const { data } = await supabase.auth.getUser()
+            if (data?.user) {
+                await initializeFreeSpins(data.user)
             }
         }
         init()
-        const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
+        
+        const { data: sub } = supabase.auth.onAuthStateChange(async (_evt, session) => {
             const nextUser = session?.user ?? null
             setUser(nextUser)
             if (nextUser) {
                 const meta = nextUser.user_metadata || {}
                 setFreeSpinsLeft(Number.isFinite(meta.free_spins_left) ? meta.free_spins_left : 3)
                 setPaidCreditsCents(Number.isFinite(meta.paid_credits_cents) ? meta.paid_credits_cents : 0)
+                
+                // Initialize free spins if not set
+                if (!Number.isFinite(meta.free_spins_left)) {
+                    await initializeFreeSpins(nextUser)
+                }
             } else {
                 setFreeSpinsLeft(3)
                 setPaidCreditsCents(0)
             }
         })
+        
+        // Refresh user data when page becomes visible (user returns from checkout)
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                refreshUserData()
+            }
+        }
+        document.addEventListener('visibilitychange', handleVisibilityChange)
+        
+        // Also refresh periodically (every 5 seconds) to catch webhook updates
+        // Only refresh if user is logged in (checked inside refreshUserData)
+        const refreshInterval = setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                refreshUserData()
+            }
+        }, 5000)
+        
         return () => {
             sub?.subscription?.unsubscribe()
+            document.removeEventListener('visibilitychange', handleVisibilityChange)
+            clearInterval(refreshInterval)
         }
-    }, [])
+    }, []) // Empty deps - only run once on mount
 
     const persistMeta = async (nextFreeSpinsLeft, nextPaidCreditsCents) => {
-        await supabase.auth.updateUser({
-            data: {
-                free_spins_left: nextFreeSpinsLeft,
-                paid_credits_cents: nextPaidCreditsCents
+        try {
+            const { data, error } = await supabase.auth.updateUser({
+                data: {
+                    free_spins_left: nextFreeSpinsLeft,
+                    paid_credits_cents: nextPaidCreditsCents
+                }
+            })
+            
+            if (error) {
+                console.error('Error persisting metadata:', error)
+                return false
             }
-        })
+            
+            // Update local user state with fresh data
+            if (data?.user) {
+                setUser(data.user)
+                const meta = data.user.user_metadata || {}
+                setFreeSpinsLeft(Number.isFinite(meta.free_spins_left) ? meta.free_spins_left : 3)
+                setPaidCreditsCents(Number.isFinite(meta.paid_credits_cents) ? meta.paid_credits_cents : 0)
+            }
+            
+            return true
+        } catch (err) {
+            console.error('Exception in persistMeta:', err)
+            return false
+        }
+    }
+    
+    // Initialize free spins if not set (for new users)
+    const initializeFreeSpins = async (currentUser) => {
+        if (!currentUser) return
+        
+        const meta = currentUser.user_metadata || {}
+        const currentFreeSpins = meta.free_spins_left
+        
+        // If free_spins_left is not set or is invalid, initialize it to 3
+        if (!Number.isFinite(currentFreeSpins)) {
+            try {
+                const { data, error } = await supabase.auth.updateUser({
+                    data: {
+                        ...meta,
+                        free_spins_left: 3,
+                        paid_credits_cents: Number.isFinite(meta.paid_credits_cents) ? meta.paid_credits_cents : 0
+                    }
+                })
+                
+                if (!error && data?.user) {
+                    setUser(data.user)
+                    setFreeSpinsLeft(3)
+                    const updatedMeta = data.user.user_metadata || {}
+                    setPaidCreditsCents(Number.isFinite(updatedMeta.paid_credits_cents) ? updatedMeta.paid_credits_cents : 0)
+                }
+            } catch (err) {
+                console.error('Error initializing free spins:', err)
+            }
+        }
     }
 
     const startSpin = (spendType /* 'free' | 'paid' */) => {
@@ -77,11 +196,19 @@ const Spinwheel = () => {
                 if (spendType === 'free') {
                     const next = Math.max(freeSpinsLeft - 1, 0)
                     setFreeSpinsLeft(next)
-                    await persistMeta(next, paidCreditsCents)
+                    const persisted = await persistMeta(next, paidCreditsCents)
+                    // Refresh data to ensure sync (persistMeta already updates state, but refresh ensures consistency)
+                    if (persisted) {
+                        setTimeout(() => refreshUserData(), 500)
+                    }
                 } else if (spendType === 'paid') {
                     const next = Math.max(paidCreditsCents - 100, 0)
                     setPaidCreditsCents(next)
-                    await persistMeta(freeSpinsLeft, next)
+                    const persisted = await persistMeta(freeSpinsLeft, next)
+                    // Refresh data to ensure sync
+                    if (persisted) {
+                        setTimeout(() => refreshUserData(), 500)
+                    }
                 }
 
                 // Very low win rate (5%)
