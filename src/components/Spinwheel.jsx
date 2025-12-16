@@ -118,11 +118,11 @@ const Spinwheel = () => {
     const persistMeta = async (nextFreeSpinsLeft, nextPaidCreditsCents) => {
         try {
             const { data, error } = await supabase.auth.updateUser({
-                data: {
-                    free_spins_left: nextFreeSpinsLeft,
-                    paid_credits_cents: nextPaidCreditsCents
-                }
-            })
+            data: {
+                free_spins_left: nextFreeSpinsLeft,
+                paid_credits_cents: nextPaidCreditsCents
+            }
+        })
             
             if (error) {
                 console.error('Error persisting metadata:', error)

@@ -18,8 +18,8 @@ export function getOriginFromRequestUrl(url) {
 	}
 	// Fallback to request URL origin
 	try {
-		const { origin } = new URL(url)
-		return origin
+	const { origin } = new URL(url)
+	return origin
 	} catch {
 		return 'http://localhost:3000'
 	}

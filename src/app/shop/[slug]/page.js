@@ -13,6 +13,12 @@ export default function ProductPage({ params }) {
     const [product, setProduct] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [hasPurchased, setHasPurchased] = useState(false);
+    const [checkingPurchase, setCheckingPurchase] = useState(false);
+    const [downloading, setDownloading] = useState(false);
+    const [isExpired, setIsExpired] = useState(false);
+    const [daysRemaining, setDaysRemaining] = useState(null);
+    const [expiresAt, setExpiresAt] = useState(null);
 
     const [qty, setQty] = useState(1)
 
@@ -45,6 +51,41 @@ export default function ProductPage({ params }) {
             setQty(q)
         } catch {}
     }, [])
+
+    // Check if user has purchased product03 (Vietnamese Hair Vendor List)
+    useEffect(() => {
+        if (slug !== 'vietnamese-hair-vendor-list') return
+        
+        const checkPurchase = async () => {
+            setCheckingPurchase(true)
+            try {
+                const response = await fetch('/api/check-purchase', {
+                    method: 'GET',
+                    credentials: 'include',
+                })
+                const data = await response.json()
+                if (data.success && data.hasPurchased) {
+                    setHasPurchased(true)
+                    setIsExpired(data.isExpired || false)
+                    setDaysRemaining(data.daysRemaining || null)
+                    setExpiresAt(data.expiresAt || null)
+                }
+            } catch (err) {
+                console.error('Error checking purchase status:', err)
+            } finally {
+                setCheckingPurchase(false)
+            }
+        }
+        
+        checkPurchase()
+        
+        // Refresh expiry status every minute to update countdown
+        const interval = setInterval(() => {
+            checkPurchase()
+        }, 60000) // Check every minute
+        
+        return () => clearInterval(interval)
+    }, [slug])
 
     // Ensure price comes from productData if available (authoritative source)
     const productFromData = productData[slug]
@@ -144,6 +185,76 @@ export default function ProductPage({ params }) {
         }
     }
 
+    const handleDownload = async () => {
+        setDownloading(true)
+        try {
+            const response = await fetch('/api/download-pdf', {
+                method: 'GET',
+                credentials: 'include',
+            })
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}))
+                const errorMessage = errorData.error || 'Download failed'
+                
+                // If expired, refresh purchase status to update UI
+                if (errorMessage.includes('expired')) {
+                    const checkResponse = await fetch('/api/check-purchase', {
+                        method: 'GET',
+                        credentials: 'include',
+                    })
+                    const checkData = await checkResponse.json()
+                    if (checkData.success) {
+                        setHasPurchased(checkData.hasPurchased)
+                        setIsExpired(checkData.isExpired || false)
+                        setDaysRemaining(checkData.daysRemaining || null)
+                    }
+                }
+                
+                throw new Error(errorMessage)
+            }
+            
+            // Get the PDF blob
+            const blob = await response.blob()
+            
+            // Create download link and trigger download
+            const url = window.URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = 'vietnamese-hair-vendor-list.pdf'
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            window.URL.revokeObjectURL(url)
+            
+            // Refresh purchase status after download (in case of cache issues)
+            setTimeout(() => {
+                const checkPurchase = async () => {
+                    try {
+                        const checkResponse = await fetch('/api/check-purchase', {
+                            method: 'GET',
+                            credentials: 'include',
+                        })
+                        const checkData = await checkResponse.json()
+                        if (checkData.success && checkData.hasPurchased) {
+                            setHasPurchased(true)
+                            setIsExpired(checkData.isExpired || false)
+                            setDaysRemaining(checkData.daysRemaining || null)
+                        }
+                    } catch (err) {
+                        console.error('Error refreshing purchase status:', err)
+                    }
+                }
+                checkPurchase()
+            }, 1000)
+        } catch (err) {
+            console.error('Download error:', err)
+            alert(err.message || 'Failed to download PDF. Please try again.')
+        } finally {
+            setDownloading(false)
+        }
+    }
+
     return (
         <div className='w-full overflow-hidden'>
             <div className="w-full lg:h-screen relative flex flex-col gap-8 lg:gap-0 lg:flex-row justify-center items-center px-5 lg:px-10 pt-20 lg:pt-14 text-pink">
@@ -183,6 +294,42 @@ export default function ProductPage({ params }) {
                         <button onClick={addToCart} className='w-full lg:w-[225px] h-[44px] lg:h-[56px] border-2 border-pink rounded-full flex justify-center items-center uppercase'>Add to cart</button>
                         <button onClick={buyNow} className='w-full lg:w-[225px] h-[44px] lg:h-[56px] text-lavender bg-pink border-2 border-pink rounded-full flex justify-center items-center uppercase'>Buy now</button>
                     </div>
+                    {/* Download button for product03 - only visible if purchased */}
+                    {slug === 'vietnamese-hair-vendor-list' && (
+                        <div className='mt-4 flex flex-col gap-2'>
+                            {checkingPurchase ? (
+                                <div className='w-full lg:w-[225px] h-[44px] lg:h-[56px] border-2 border-pink rounded-full flex justify-center items-center uppercase text-gray-500'>
+                                    Checking...
+                                </div>
+                            ) : hasPurchased ? (
+                                <>
+                                    <button 
+                                        onClick={handleDownload}
+                                        disabled={downloading || isExpired}
+                                        className={`w-full lg:w-[225px] h-[44px] lg:h-[56px] text-white border-2 rounded-full flex justify-center items-center uppercase transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                                            isExpired 
+                                                ? 'bg-gray-400 border-gray-400 cursor-not-allowed' 
+                                                : 'bg-green-600 hover:bg-green-700 border-green-600'
+                                        }`}
+                                    >
+                                        {downloading ? 'Downloading...' : isExpired ? '⏰ Download Expired' : '📥 Download PDF'}
+                                    </button>
+                                    {!isExpired && daysRemaining !== null && (
+                                        <p className='text-xs text-gray-600 font-satoshi'>
+                                            {daysRemaining === 1 
+                                                ? '⚠️ Expires in 1 day' 
+                                                : `⚠️ Expires in ${daysRemaining} days`}
+                                        </p>
+                                    )}
+                                    {isExpired && (
+                                        <p className='text-xs text-red-600 font-satoshi font-semibold'>
+                                            ⚠️ Download link has expired
+                                        </p>
+                                    )}
+                                </>
+                            ) : null}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -199,6 +346,17 @@ export default function ProductPage({ params }) {
                 <p className='font-montserrat font-bold text-[12px] uppercase'>{product.name}</p>
                 <h3 className='w-full lg:w-[500px] font-astrid text-[36px] lg:text-[56px] leading-8 lg:leading-14'>{product.productdetails}</h3>
                 <p className='font-satoshi text-[16px] lg:text-[20px]'>{product.description2}</p>
+                {/* Expiry warning for product03 */}
+                {slug === 'vietnamese-hair-vendor-list' && (
+                    <div className='mt-4 p-4 bg-yellow-50 border-2 border-yellow-400 rounded-lg'>
+                        <p className='font-satoshi font-bold text-[14px] lg:text-[16px] text-yellow-800 mb-2'>
+                            ⚠️ IMPORTANT: Download Time Limit
+                        </p>
+                        <p className='font-satoshi text-[13px] lg:text-[15px] text-yellow-700'>
+                            <strong>You have 7 days from the date of purchase to download this PDF.</strong> After 7 days, the download link will be retracted and you will no longer be able to access the document. Please download and save the PDF to your device before the expiry date.
+                        </p>
+                    </div>
+                )}
                 <div className='grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-5'>
                     <div className='w-full h-[100px] lg:h-[125px] flex flex-col lg:gap-1 justify-center px-4 lg:px-10 rounded-[16px] lg:rounded-[20px] border-2 border-pink'>
                         <h3 className='font-satoshi font-black text-[14px] lg:text-[16px] uppercase'>Affordable</h3>

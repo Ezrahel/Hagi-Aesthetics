@@ -327,7 +327,7 @@ export default async function SuccessPage({ searchParams }) {
 		
 		// Only finalize order if it's not a spin credit (spin credits may not have orders)
 		if (!isSpinCredit) {
-			order = await finalizeOrder(sessionId, typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id, session.amount_total)
+		order = await finalizeOrder(sessionId, typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id, session.amount_total)
 
 			// Fire email send in background - use setImmediate for true non-blocking
 			setImmediate(() => {
