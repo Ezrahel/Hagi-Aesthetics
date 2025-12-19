@@ -21,10 +21,11 @@ const Header = () => {
         { name: 'About us', path: '/aboutus' },
         { name: 'Faq', path: '/faq' },
         { name: 'Contact us', path: '/contactus' },
+        { name: 'Book Us', path: '/book-us' },
     ]
 
     const getTextColor = () => {
-        if (pathname === '/shop' || pathname === '/aboutus' || pathname === '/faq' || pathname === '/contactus' || pathname === '/cart' || pathname === '/checkout') {
+        if (pathname === '/shop' || pathname === '/aboutus' || pathname === '/faq' || pathname === '/contactus' || pathname === '/cart' || pathname === '/checkout' || pathname === '/book-us') {
             return 'text-lavender'
         }
         return 'text-[#08070885]'
