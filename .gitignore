@@ -36,5 +36,5 @@ yarn-error.log*
 next-env.d.ts
 
 # Private PDF files (may contain sensitive information)
-/private/*.pdf
+# /private/*.pdf
 !/private/README.md
