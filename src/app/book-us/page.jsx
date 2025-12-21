@@ -6,6 +6,8 @@ export default function BookUsPage() {
     const scriptLoadedRef = useRef(false)
     const [mounted, setMounted] = useState(false)
     const [error, setError] = useState(null)
+    const [useFallback, setUseFallback] = useState(false)
+    const [calendlyUrl, setCalendlyUrl] = useState('https://calendly.com/hagiaesthetics/30min')
 
     useEffect(() => {
         // Only run on client side
@@ -14,6 +16,16 @@ export default function BookUsPage() {
         }
 
         setMounted(true)
+
+        // Get Calendly URL from environment or use fallback
+        const url = process.env.NEXT_PUBLIC_CALENDLY_URL || 'https://calendly.com/hagiaesthetics/30min'
+        setCalendlyUrl(url)
+
+        // Debug: Log the URL being used (only in development)
+        if (process.env.NODE_ENV === 'development') {
+            console.log('Calendly URL:', url)
+            console.log('Environment variable set:', !!process.env.NEXT_PUBLIC_CALENDLY_URL)
+        }
 
         // Prevent duplicate script loading
         if (scriptLoadedRef.current) return
@@ -34,6 +46,12 @@ export default function BookUsPage() {
                     min-height: 700px !important;
                     border: none !important;
                 }
+                .calendly-fallback-iframe {
+                    width: 100%;
+                    height: 700px;
+                    min-height: 700px;
+                    border: none;
+                }
             `
             if (document.head) {
                 document.head.appendChild(style)
@@ -43,6 +61,13 @@ export default function BookUsPage() {
             const link = document.createElement('link')
             link.href = 'https://assets.calendly.com/assets/external/widget.css'
             link.rel = 'stylesheet'
+            link.onerror = () => {
+                // If CSS fails, use fallback iframe
+                if (process.env.NODE_ENV === 'development') {
+                    console.warn('Calendly CSS failed to load, using fallback iframe')
+                }
+                setUseFallback(true)
+            }
             if (document.head) {
                 document.head.appendChild(link)
             }
@@ -52,23 +77,26 @@ export default function BookUsPage() {
             script.src = 'https://assets.calendly.com/assets/external/widget.js'
             script.async = true
             script.onerror = () => {
-                console.error('Failed to load Calendly script')
-                setError('Failed to load booking widget. Please refresh the page.')
+                // Script failed to load - use fallback iframe
+                if (process.env.NODE_ENV === 'development') {
+                    console.warn('Calendly script failed to load, using fallback iframe')
+                }
+                setUseFallback(true)
             }
             script.onload = () => {
                 try {
-                    // Get Calendly URL from environment or use fallback
-                    const calendlyUrl = process.env.NEXT_PUBLIC_CALENDLY_URL || 'https://calendly.com/hagiaesthetics/30min'
-                    
                     // Retry mechanism with increasing delays
                     let retryCount = 0
-                    const maxRetries = 10
-                    const initialDelay = 200
+                    const maxRetries = 15
+                    const initialDelay = 300
                     
                     const tryInitialize = () => {
                         if (retryCount >= maxRetries) {
-                            console.error('Calendly widget failed to initialize after multiple attempts')
-                            setError('Failed to load booking widget. Please check your Calendly URL configuration or refresh the page.')
+                            // After max retries, fall back to iframe
+                            if (process.env.NODE_ENV === 'development') {
+                                console.warn('Calendly widget failed to initialize after multiple attempts, using fallback iframe')
+                            }
+                            setUseFallback(true)
                             return
                         }
                         
@@ -82,7 +110,7 @@ export default function BookUsPage() {
                                 }
                                 
                                 window.Calendly.initInlineWidget({
-                                    url: calendlyUrl,
+                                    url: url,
                                     parentElement: calendlyContainerRef.current,
                                     prefill: {},
                                     utm: {}
@@ -90,14 +118,18 @@ export default function BookUsPage() {
                                 
                                 // Success - clear any error state
                                 setError(null)
+                                setUseFallback(false)
                             } catch (initError) {
-                                console.error('Error initializing Calendly widget:', initError)
                                 // Retry on error
                                 retryCount++
                                 if (retryCount < maxRetries) {
                                     setTimeout(tryInitialize, initialDelay * (retryCount + 1))
                                 } else {
-                                    setError('Failed to initialize booking widget. Please refresh the page.')
+                                    // Fall back to iframe
+                                    if (process.env.NODE_ENV === 'development') {
+                                        console.warn('Error initializing Calendly widget, using fallback:', initError)
+                                    }
+                                    setUseFallback(true)
                                 }
                             }
                         } else {
@@ -106,11 +138,11 @@ export default function BookUsPage() {
                             if (retryCount < maxRetries) {
                                 setTimeout(tryInitialize, initialDelay * (retryCount + 1))
                             } else {
-                                // Only log in development
+                                // Fall back to iframe
                                 if (process.env.NODE_ENV === 'development') {
-                                    console.warn('Calendly not available or container not ready after retries')
+                                    console.warn('Calendly not available or container not ready after retries, using fallback iframe')
                                 }
-                                setError('Booking widget is taking longer than expected to load. Please refresh the page.')
+                                setUseFallback(true)
                             }
                         }
                     }
@@ -118,8 +150,10 @@ export default function BookUsPage() {
                     // Start initialization with initial delay
                     setTimeout(tryInitialize, initialDelay)
                 } catch (error) {
-                    console.error('Error in Calendly onload handler:', error)
-                    setError('Failed to load booking widget. Please refresh the page.')
+                    if (process.env.NODE_ENV === 'development') {
+                        console.error('Error in Calendly onload handler:', error)
+                    }
+                    setUseFallback(true)
                 }
             }
             
@@ -140,13 +174,17 @@ export default function BookUsPage() {
                         style.parentNode.removeChild(style)
                     }
                 } catch (cleanupError) {
-                    console.error('Error during cleanup:', cleanupError)
+                    if (process.env.NODE_ENV === 'development') {
+                        console.error('Error during cleanup:', cleanupError)
+                    }
                 }
                 scriptLoadedRef.current = false
             }
         } catch (error) {
-            console.error('Error setting up Calendly:', error)
-            setError('Failed to load booking widget. Please refresh the page.')
+            if (process.env.NODE_ENV === 'development') {
+                console.error('Error setting up Calendly:', error)
+            }
+            setUseFallback(true)
         }
     }, [])
 
@@ -192,6 +230,14 @@ export default function BookUsPage() {
                                     </a>
                                 </div>
                             </div>
+                        ) : useFallback ? (
+                            // Fallback: Direct iframe embed (more reliable, no JS required)
+                            <iframe
+                                src={calendlyUrl}
+                                className="calendly-fallback-iframe w-full"
+                                frameBorder="0"
+                                title="Calendly Scheduling Page"
+                            />
                         ) : (
                             <div 
                                 ref={calendlyContainerRef}
