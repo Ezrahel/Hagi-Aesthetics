@@ -25,7 +25,10 @@ export async function GET(request, { params }) {
       }
     } catch (dbError) {
       // If database lookup fails, continue to fallback
-      console.log('Database lookup failed, trying productData fallback')
+      // Only log in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Database lookup failed, trying productData fallback')
+      }
     }
 
     // If not found in database, try to find by slug in productData

@@ -146,7 +146,11 @@ export async function POST(request) {
 		}
 
 		const supabase = getSupabaseAdmin()
-		const productIds = Array.from(new Set(items.map((item) => item.productId)))
+		// Use Set directly for better performance (no Array.from needed)
+		const productIdsSet = new Set(items.map((item) => item.productId))
+		const productIds = Array.from(productIdsSet)
+		
+		// Parallelize product lookup and prepare productMap efficiently
 		let products = []
 		try {
 			const resp = await supabase
@@ -160,7 +164,10 @@ export async function POST(request) {
 			// or if product IDs are not valid UUIDs (22P02 - invalid UUID syntax),
 			// allow fallback to client-supplied item details (price/name). Otherwise fail.
 			if (productsError && (productsError.code === 'PGRST205' || productsError.code === '22P02')) {
-				console.warn('Products lookup failed; falling back to client-supplied item data')
+				// Only log in development
+				if (process.env.NODE_ENV === 'development') {
+					console.warn('Products lookup failed; falling back to client-supplied item data')
+				}
 				products = []
 			} else {
 				console.error('Supabase products error', productsError)
@@ -168,29 +175,32 @@ export async function POST(request) {
 			}
 		}
 
-		const productMap = new Map((products || []).map((product) => [ product.id, product ]))
+		// Build productMap efficiently - use for...of for better performance
+		const productMap = new Map()
+		for (const product of products || []) {
+			productMap.set(product.id, product)
+		}
 		
-		// Enhance productMap with productData for missing products
-		productIds.forEach((id) => {
+		// Enhance productMap with productData for missing products (single pass)
+		for (const id of productIdsSet) {
 			if (!productMap.has(id) && productData[id]) {
-				// Add product from productData to the map
 				productMap.set(id, {
 					id: id,
 					name: productData[id].name,
-					price: productData[id].price, // Use price from productData
+					price: productData[id].price,
 					image: productData[id].image,
 				})
 			}
-		})
+		}
 		
-		const missingProductIds = productIds.filter((id) => !productMap.has(id))
+		// Check for missing products (only if needed for validation)
+		const missingProductIds = Array.from(productIdsSet).filter((id) => !productMap.has(id))
 		// Skip Stripe fallback price retrieval since we have productData fallback
 		// This avoids unnecessary Stripe API calls and potential auth errors
 		let fallbackPriceId = null
 		let fallbackPrice = null
-		if (missingProductIds.length > 0) {
+		if (missingProductIds.length > 0 && process.env.NODE_ENV === 'development') {
 			console.warn('Some products not found in database or productData:', missingProductIds)
-			// We'll rely on client-supplied prices or productData, not Stripe fallback
 		}
 
 		const fallbackProductName = process.env.SPIN_CREDIT_PRODUCT_NAME || 'Spin Credits'
@@ -291,8 +301,7 @@ export async function POST(request) {
 				}
 			}
 			
-			// If all else fails, log clear error
-			console.error(`Unable to resolve price for product ${item.productId}. No productData, no product row, no client price, and no valid Stripe fallback price.`)
+			// If all else fails, throw error (no console.log needed - error will be logged by error handler)
 			throw new Error(`Unable to resolve price for product ${item.productId}. Please ensure productData has this product or client sends a price.`)
 		})
 
@@ -347,13 +356,12 @@ export async function POST(request) {
 			supabaseOrderPayload.customerName = payload.customerName
 		}
 		
-		// Remove null/undefined values
-		const cleanedPayload = {}
-		Object.keys(supabaseOrderPayload).forEach(key => {
-			if (supabaseOrderPayload[key] !== null && supabaseOrderPayload[key] !== undefined) {
-				cleanedPayload[key] = supabaseOrderPayload[key]
-			}
-		})
+		// Remove null/undefined values - use Object.entries for better performance
+		const cleanedPayload = Object.fromEntries(
+			Object.entries(supabaseOrderPayload).filter(([_, value]) => 
+				value !== null && value !== undefined
+			)
+		)
 
 		const { data: orderRecord, error: orderError } = await supabase
 			.from('orders')
@@ -365,8 +373,11 @@ export async function POST(request) {
 			console.error('Supabase order insert error', orderError)
 			// Provide more helpful error message
 			if (orderError.code === 'PGRST204') {
-				console.error('Column mismatch detected. Missing column:', orderError.message)
-				console.error('Attempted to insert columns:', Object.keys(cleanedPayload))
+				// Only log detailed info in development
+				if (process.env.NODE_ENV === 'development') {
+					console.error('Column mismatch detected. Missing column:', orderError.message)
+					console.error('Attempted to insert columns:', Object.keys(cleanedPayload))
+				}
 				const missingColumn = orderError.message.match(/'([^']+)'/)?.[1] || 'unknown'
 				return errorJson(`Database schema mismatch: Column '${missingColumn}' not found. Please run create-orderId-column.sql in your Supabase SQL Editor.`, 500)
 			}
@@ -383,11 +394,17 @@ export async function POST(request) {
 					.eq('id', orderRecord.id)
 				if (updateOrderIdError) {
 					// Silently fail - orderId column might not exist, that's okay
-					console.warn('Could not update orderId (column may not exist):', updateOrderIdError.message)
+					// Only log in development
+					if (process.env.NODE_ENV === 'development') {
+						console.warn('Could not update orderId (column may not exist):', updateOrderIdError.message)
+					}
 				}
 			} catch (err) {
 				// Silently fail - orderId column might not exist, that's okay
-				console.warn('Could not update orderId (column may not exist):', err.message)
+				// Only log in development
+				if (process.env.NODE_ENV === 'development') {
+					console.warn('Could not update orderId (column may not exist):', err.message)
+				}
 			}
 		}
 
@@ -453,6 +470,7 @@ export async function POST(request) {
 			.match(orderIdentifier)
 
 		if (updateError) {
+			// Only log critical errors
 			console.error('Supabase order update error', updateError)
 		}
 

@@ -10,7 +10,10 @@ const CTA = () => {
             alert('Please enter your email');
             return;
         }
-        console.log("Subscribed email:", email);
+        // Only log in development
+        if (process.env.NODE_ENV === 'development') {
+            console.log("Subscribed email:", email);
+        }
         alert(`Thanks for subscribing, ${email}!`);
         setEmail('');
     };

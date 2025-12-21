@@ -69,32 +69,46 @@ export async function GET(request) {
 		
 		// Check if any order contains the PDF product and track purchase date
 		// Items is JSONB array, check for product_id or slug match
-		let hasPurchased = false
-		let purchaseDate = null
+		// Optimized: Use Set for O(1) lookups and early exit
 		const EXPIRY_DAYS = 7
 		const EXPIRY_MS = EXPIRY_DAYS * 24 * 60 * 60 * 1000 // 7 days in milliseconds
 		
+		// Pre-compute valid product IDs for O(1) lookup
+		const validProductIds = new Set([
+			PDF_PRODUCT_SLUG,
+			'product03',
+			'product 03'
+		])
+		
+		let hasPurchased = false
+		let purchaseDate = null
+		
 		if (orders && Array.isArray(orders)) {
-			for (const order of orders) {
+			// Use for...of for better performance and early exit
+			outer: for (const order of orders) {
 				const items = order.items
-				if (Array.isArray(items)) {
-					for (const item of items) {
-						// Check if product_id matches the slug or if it's product03
-						if (
-							item.product_id === PDF_PRODUCT_SLUG ||
-							item.product_id === 'product03' ||
-							item.product_id === 'product 03' ||
-							item.name?.toLowerCase().includes('vietnamese hair vendor') ||
-							item.name?.toLowerCase().includes('hair vendor list')
-						) {
-							hasPurchased = true
-							// Use the order's created_at as purchase date
-							purchaseDate = order.created_at
-							break
-						}
+				if (!Array.isArray(items)) continue
+				
+				// Single pass through items with early exit
+				for (const item of items) {
+					const productId = item.product_id
+					// Fast Set lookup for product_id
+					if (productId && validProductIds.has(productId)) {
+						hasPurchased = true
+						purchaseDate = order.created_at
+						break outer
+					}
+					// Only check name if product_id doesn't match (lazy evaluation)
+					const itemName = item.name?.toLowerCase()
+					if (itemName && (
+						itemName.includes('vietnamese hair vendor') ||
+						itemName.includes('hair vendor list')
+					)) {
+						hasPurchased = true
+						purchaseDate = order.created_at
+						break outer
 					}
 				}
-				if (hasPurchased) break
 			}
 		}
 		

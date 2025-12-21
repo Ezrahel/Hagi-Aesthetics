@@ -30,7 +30,10 @@ function getSupabaseAdmin() {
 // Update user spin credits
 async function updateSpinCredits(userId, amountCents, session = null) {
 	if (!userId || !amountCents || amountCents <= 0) {
-		console.warn('Invalid parameters for updateSpinCredits:', { userId, amountCents })
+		// Only log in development (invalid params are expected in some edge cases)
+		if (process.env.NODE_ENV === 'development') {
+			console.warn('Invalid parameters for updateSpinCredits:', { userId, amountCents })
+		}
 		return { success: false, error: 'Invalid parameters' }
 	}
 
@@ -83,7 +86,10 @@ async function updateSpinCredits(userId, amountCents, session = null) {
 			return { success: false, error: updateError.message }
 		}
 
-		console.log(`Successfully updated spin credits for user ${userId}: +${amountCents} cents (new total: ${newCredits} cents)`)
+		// Only log in development
+		if (process.env.NODE_ENV === 'development') {
+			console.log(`Successfully updated spin credits for user ${userId}: +${amountCents} cents (new total: ${newCredits} cents)`)
+		}
 		return { success: true, newCredits }
 	} catch (err) {
 		console.error('Error updating spin credits:', err)
@@ -131,24 +137,19 @@ export async function POST(request) {
 		if (event.type === 'checkout.session.completed') {
 			const session = event.data.object
 
-			// Debug logging
-			console.log('Webhook received checkout.session.completed:', {
-				sessionId: session.id,
-				paymentStatus: session.payment_status,
-				amountTotal: session.amount_total,
-				metadata: session.metadata
-			})
+			// Only log in development
+			if (process.env.NODE_ENV === 'development') {
+				console.log('Webhook received checkout.session.completed:', {
+					sessionId: session.id,
+					paymentStatus: session.payment_status,
+					amountTotal: session.amount_total,
+					metadata: session.metadata
+				})
+			}
 
 			// Check if this is a spin credit purchase
 			const isSpinCredit = session?.metadata?.source === 'spinwheel_topup'
 			const userId = session?.metadata?.user_id
-
-			console.log('Spin credit check:', {
-				isSpinCredit,
-				userId,
-				paymentStatus: session.payment_status,
-				metadataSource: session?.metadata?.source
-			})
 
 			if (isSpinCredit && userId && session.payment_status === 'paid') {
 				const amountCents = typeof session.amount_total === 'number' 
@@ -156,12 +157,18 @@ export async function POST(request) {
 					: 0
 
 				if (amountCents > 0) {
-					console.log(`Processing spin credit purchase: User ${userId}, Amount: ${amountCents} cents, Session: ${session.id}`)
+					// Only log in development
+					if (process.env.NODE_ENV === 'development') {
+						console.log(`Processing spin credit purchase: User ${userId}, Amount: ${amountCents} cents, Session: ${session.id}`)
+					}
 					
 					const result = await updateSpinCredits(userId, amountCents, session)
 					
 					if (result.success) {
-						console.log(`Spin credits successfully added via webhook for user ${userId}`)
+						// Only log in development
+						if (process.env.NODE_ENV === 'development') {
+							console.log(`Spin credits successfully added via webhook for user ${userId}`)
+						}
 						return NextResponse.json({ 
 							received: true, 
 							message: 'Spin credits updated successfully',
@@ -179,7 +186,10 @@ export async function POST(request) {
 						})
 					}
 				} else {
-					console.warn(`Spin credit purchase with zero or invalid amount: ${amountCents}`)
+					// Only log in development
+					if (process.env.NODE_ENV === 'development') {
+						console.warn(`Spin credit purchase with zero or invalid amount: ${amountCents}`)
+					}
 					return NextResponse.json({ received: true, message: 'Invalid amount' })
 				}
 			} else {

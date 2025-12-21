@@ -134,16 +134,17 @@ Received: ${new Date().toLocaleString()}
 			return { success: true, method: 'resend' }
 		}
 		
-		// Fallback: Log to console (for development)
-		console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-		console.log('📅 BOOKING NOTIFICATION EMAIL')
-		console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-		console.log(emailBody)
-		console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-		console.log(`\nTo: ${recipientEmail}`)
-		console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
-		
-		if (process.env.NODE_ENV === 'production') {
+		// Fallback: Only log in development
+		if (process.env.NODE_ENV === 'development') {
+			console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+			console.log('📅 BOOKING NOTIFICATION EMAIL')
+			console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+			console.log(emailBody)
+			console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+			console.log(`\nTo: ${recipientEmail}`)
+			console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
+		} else {
+			// In production, only warn if email service is not configured
 			console.warn('⚠️  Email service not configured. Please set RESEND_API_KEY in production.')
 		}
 		
@@ -223,7 +224,10 @@ function parseCalendlyPayload(payload) {
 		return bookingData
 	} catch (error) {
 		console.error('Error parsing Calendly payload:', error)
-		console.error('Payload received:', JSON.stringify(payload, null, 2))
+		// Only log full payload in development
+		if (process.env.NODE_ENV === 'development') {
+			console.error('Payload received:', JSON.stringify(payload, null, 2))
+		}
 		return null
 	}
 }
@@ -254,11 +258,13 @@ export async function POST(request) {
 		// Check event type - we're interested in invitee.created events
 		const eventType = payload.event || payload.event_type || 'unknown'
 		
-		// Log the webhook for debugging
-		console.log('Calendly webhook received:', {
-			eventType,
-			timestamp: new Date().toISOString(),
-		})
+		// Only log in development
+		if (process.env.NODE_ENV === 'development') {
+			console.log('Calendly webhook received:', {
+				eventType,
+				timestamp: new Date().toISOString(),
+			})
+		}
 		
 		// Parse booking data from payload
 		const bookingData = parseCalendlyPayload(payload)
@@ -274,7 +280,10 @@ export async function POST(request) {
 		// Send booking email
 		await sendBookingEmail(bookingData)
 		
-		console.log('Booking email sent successfully for:', bookingData.email)
+		// Only log in development
+		if (process.env.NODE_ENV === 'development') {
+			console.log('Booking email sent successfully for:', bookingData.email)
+		}
 		
 		// Return success response (Calendly expects 200)
 		return NextResponse.json({

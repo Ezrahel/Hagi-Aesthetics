@@ -24,31 +24,53 @@ const Header = () => {
         { name: 'Book Us', path: '/book-us' },
     ]
 
-    const getTextColor = () => {
-        if (pathname === '/shop' || pathname === '/aboutus' || pathname === '/faq' || pathname === '/contactus' || pathname === '/cart' || pathname === '/checkout' || pathname === '/book-us') {
-            return 'text-lavender'
-        }
-        return 'text-[#08070885]'
-    }
+    // Memoize text color computation
+    const textColor = React.useMemo(() => {
+        const lavenderPaths = ['/shop', '/aboutus', '/faq', '/contactus', '/cart', '/checkout', '/book-us']
+        return lavenderPaths.includes(pathname) ? 'text-lavender' : 'text-[#08070885]'
+    }, [pathname])
 
-    const computeCartCount = () => {
+    // Memoize cart count computation to avoid unnecessary recalculations
+    const computeCartCount = React.useCallback(() => {
         try {
             const raw = typeof window !== 'undefined' ? window.localStorage.getItem('cart') : null
-            const items = raw ? JSON.parse(raw) : []
-            const count = Array.isArray(items) ? items.reduce((n, i) => n + (i.qty || 1), 0) : 0
+            if (!raw) {
+                setCartCount(0)
+                return
+            }
+            const items = JSON.parse(raw)
+            if (!Array.isArray(items)) {
+                setCartCount(0)
+                return
+            }
+            // Use for loop for better performance than reduce
+            let count = 0
+            for (let i = 0; i < items.length; i++) {
+                count += items[i]?.qty || 1
+            }
             setCartCount(count)
         } catch {
             setCartCount(0)
         }
-    }
+    }, [])
 
     useEffect(() => {
+        if (typeof window === 'undefined') return
+        
         setMounted(true)
-        const checkMobile = () => setIsMobile(window.innerWidth <= 768)
+        const checkMobile = () => {
+            if (typeof window !== 'undefined') {
+                setIsMobile(window.innerWidth <= 768)
+            }
+        }
         checkMobile()
 
         window.addEventListener('resize', checkMobile)
-        return () => window.removeEventListener('resize', checkMobile)
+        return () => {
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('resize', checkMobile)
+            }
+        }
     }, [])
 
     useEffect(() => {
@@ -101,7 +123,7 @@ const Header = () => {
                             className='w-[45px] lg:w-[85px] h-auto'
                         />
                     </Link>
-                    <div className={`hidden lg:flex font-montserrat font-bold text-[14px] uppercase gap-[10px] ${getTextColor()}`}>
+                    <div className={`hidden lg:flex font-montserrat font-bold text-[14px] uppercase gap-[10px] ${textColor}`}>
                         {navItems.map((item) => (
                             <Link
                                 key={item.path}

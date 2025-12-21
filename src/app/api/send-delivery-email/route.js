@@ -91,18 +91,17 @@ Submitted: ${new Date().toLocaleString()}
             return { success: true, method: 'resend' }
         }
         
-        // Fallback: Log to console (for development)
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-        console.log('📧 DELIVERY INFORMATION EMAIL')
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-        console.log(emailBody)
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-        console.log(`\nTo: ${recipientEmail}`)
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
-        
-        // In production, you should use a real email service
-        // For now, we'll return success but log a warning
-        if (process.env.NODE_ENV === 'production') {
+        // Fallback: Only log in development
+        if (process.env.NODE_ENV === 'development') {
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+            console.log('📧 DELIVERY INFORMATION EMAIL')
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+            console.log(emailBody)
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+            console.log(`\nTo: ${recipientEmail}`)
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
+        } else {
+            // In production, only warn if email service is not configured
             console.warn('⚠️  Email service not configured. Please set RESEND_API_KEY in production.')
         }
         

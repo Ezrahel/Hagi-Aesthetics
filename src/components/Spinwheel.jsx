@@ -38,7 +38,10 @@ const Spinwheel = () => {
                     }
                 }
             } catch (apiErr) {
-                console.warn('API refresh failed, falling back to client refresh:', apiErr)
+                // Silently fallback to client refresh - no need to log in production
+                if (process.env.NODE_ENV === 'development') {
+                    console.warn('API refresh failed, falling back to client refresh:', apiErr)
+                }
             }
             
             // Fallback: refresh from client session
@@ -100,18 +103,34 @@ const Spinwheel = () => {
         }
         document.addEventListener('visibilitychange', handleVisibilityChange)
         
-        // Also refresh periodically (every 5 seconds) to catch webhook updates
-        // Only refresh if user is logged in (checked inside refreshUserData)
-        const refreshInterval = setInterval(() => {
-            if (document.visibilityState === 'visible') {
-                refreshUserData()
-            }
-        }, 5000)
+        // Event-driven refresh instead of polling
+        // Refresh only after user actions or when tab becomes visible
+        // Use exponential backoff for periodic checks (30s → 60s max)
+        let refreshTimeoutId = null
+        let backoffDelay = 30000 // Start at 30 seconds
+        
+        const scheduleRefresh = () => {
+            if (refreshTimeoutId) clearTimeout(refreshTimeoutId)
+            
+            refreshTimeoutId = setTimeout(() => {
+                if (document.visibilityState === 'visible' && user) {
+                    refreshUserData()
+                    // Exponential backoff: 30s → 45s → 60s max
+                    backoffDelay = Math.min(backoffDelay * 1.5, 60000)
+                    scheduleRefresh()
+                }
+            }, backoffDelay)
+        }
+        
+        // Only start periodic refresh if user is logged in
+        if (user) {
+            scheduleRefresh()
+        }
         
         return () => {
             sub?.subscription?.unsubscribe()
             document.removeEventListener('visibilitychange', handleVisibilityChange)
-            clearInterval(refreshInterval)
+            if (refreshTimeoutId) clearTimeout(refreshTimeoutId)
         }
     }, []) // Empty deps - only run once on mount
 
@@ -199,7 +218,10 @@ const Spinwheel = () => {
                     const persisted = await persistMeta(next, paidCreditsCents)
                     // Refresh data to ensure sync (persistMeta already updates state, but refresh ensures consistency)
                     if (persisted) {
-                        setTimeout(() => refreshUserData(), 500)
+                        // Use requestAnimationFrame for better performance than setTimeout
+                        requestAnimationFrame(() => {
+                            refreshUserData()
+                        })
                     }
                 } else if (spendType === 'paid') {
                     const next = Math.max(paidCreditsCents - 100, 0)
@@ -207,7 +229,10 @@ const Spinwheel = () => {
                     const persisted = await persistMeta(freeSpinsLeft, next)
                     // Refresh data to ensure sync
                     if (persisted) {
-                        setTimeout(() => refreshUserData(), 500)
+                        // Use requestAnimationFrame for better performance than setTimeout
+                        requestAnimationFrame(() => {
+                            refreshUserData()
+                        })
                     }
                 }
 
@@ -227,7 +252,10 @@ const Spinwheel = () => {
                         ]
                         await supabase.auth.updateUser({ data: { coupons: nextCoupons } })
                     } catch (e) {
-                        console.error('Failed to persist coupon', e)
+                        // Only log critical errors
+                        if (process.env.NODE_ENV === 'development') {
+                            console.error('Failed to persist coupon', e)
+                        }
                     }
 
                     setResult({ status: "win", amount, code: couponCode })
@@ -262,7 +290,8 @@ const Spinwheel = () => {
             if (!response.ok) {
                 const detail = await response.json().catch(() => ({}))
                 const errorMsg = detail?.error || `Server returned ${response.status}`
-                console.error('Stripe checkout session creation failed:', errorMsg, detail)
+                // Always log Stripe errors (critical)
+                console.error('Stripe checkout session creation failed:', errorMsg)
                 throw new Error(errorMsg)
             }
             const { url } = await response.json()

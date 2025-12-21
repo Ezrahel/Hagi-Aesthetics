@@ -1,6 +1,7 @@
 import Header from "@/components/Header";
 import "./globals.css";
 import Footer from "@/components/Footer";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 export const metadata = {
   title: "Hagi Aesthetics",
@@ -14,9 +15,11 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`antialiased`} suppressHydrationWarning>
-        <Header />
-        {children}
-        <Footer />
+        <ErrorBoundary>
+          <Header />
+          {children}
+          <Footer />
+        </ErrorBoundary>
       </body>
     </html>
   );

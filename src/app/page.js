@@ -19,30 +19,46 @@ const Spinwheel = dynamic(() => import('@/components/Spinwheel'), { ssr: false }
 
 const Page = () => {
   useEffect(() => {
+    if (typeof window === 'undefined') return
+
     // Lazy load Lenis to reduce initial bundle size
     let lenis = null;
     let rafId = null;
     
     const initLenis = async () => {
-      const Lenis = (await import('lenis')).default;
-      lenis = new Lenis();
-      
-    const raf = (time) => {
-      lenis.raf(time);
-        rafId = requestAnimationFrame(raf);
-    };
-      rafId = requestAnimationFrame(raf);
+      try {
+        const Lenis = (await import('lenis')).default;
+        lenis = new Lenis();
+        
+        const raf = (time) => {
+          if (lenis) {
+            lenis.raf(time);
+          }
+          if (typeof window !== 'undefined') {
+            rafId = requestAnimationFrame(raf);
+          }
+        };
+        if (typeof window !== 'undefined') {
+          rafId = requestAnimationFrame(raf);
+        }
+      } catch (error) {
+        console.error('Error initializing Lenis:', error);
+      }
     };
     
     initLenis();
     
     // Cleanup function to prevent memory leaks
     return () => {
-      if (rafId) {
+      if (rafId && typeof window !== 'undefined') {
         cancelAnimationFrame(rafId);
       }
       if (lenis) {
-        lenis.destroy();
+        try {
+          lenis.destroy();
+        } catch (error) {
+          console.error('Error destroying Lenis:', error);
+        }
       }
     };
   }, []);

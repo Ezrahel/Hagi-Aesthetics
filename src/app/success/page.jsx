@@ -16,7 +16,10 @@ async function sendOrderEmail({ order, session, deliveryInfo }) {
 
 	// Basic safety checks – never throw if email data is incomplete
 	if (!order && !session) {
-		console.warn('sendOrderEmail called without order/session')
+		// Only log in development
+		if (process.env.NODE_ENV === 'development') {
+			console.warn('sendOrderEmail called without order/session')
+		}
 		return
 	}
 
@@ -205,14 +208,16 @@ async function sendOrderEmail({ order, session, deliveryInfo }) {
 			return
 		}
 
-		// Fallback: log to console in development
-		console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-		console.log('📧 ORDER CONFIRMATION EMAIL (DEV LOG)')
-		console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-		console.log(emailBody)
-		console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-		console.log(`To: ${recipientEmail}`)
-		console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
+		// Fallback: only log in development mode
+		if (process.env.NODE_ENV === 'development') {
+			console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+			console.log('📧 ORDER CONFIRMATION EMAIL (DEV LOG)')
+			console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+			console.log(emailBody)
+			console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+			console.log(`To: ${recipientEmail}`)
+			console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
+		}
 	} catch (err) {
 		// Never throw from email helper – just log
 		console.error('sendOrderEmail failed:', err)
@@ -299,7 +304,10 @@ export default async function SuccessPage({ searchParams }) {
 						: []
 					
 					if (processedSessions.includes(sessionId)) {
-						console.log(`Session ${sessionId} already processed, skipping credit update in success page`)
+						// Only log in development
+						if (process.env.NODE_ENV === 'development') {
+							console.log(`Session ${sessionId} already processed, skipping credit update in success page`)
+						}
 					} else {
 						const currentCredits = Number.isFinite(currentMeta.paid_credits_cents) ? currentMeta.paid_credits_cents : 0
 						const newCredits = currentCredits + session.amount_total
@@ -313,7 +321,10 @@ export default async function SuccessPage({ searchParams }) {
 							}
 						})
 						
-						console.log(`Spin credits updated via success page fallback for user ${userId}, session ${sessionId}`)
+						// Only log in development
+						if (process.env.NODE_ENV === 'development') {
+							console.log(`Spin credits updated via success page fallback for user ${userId}, session ${sessionId}`)
+						}
 					}
 				}
 			} catch (err) {

@@ -228,25 +228,28 @@ export default function ProductPage({ params }) {
             window.URL.revokeObjectURL(url)
             
             // Refresh purchase status after download (in case of cache issues)
-            setTimeout(() => {
-                const checkPurchase = async () => {
-                    try {
-                        const checkResponse = await fetch('/api/check-purchase', {
-                            method: 'GET',
-                            credentials: 'include',
-                        })
-                        const checkData = await checkResponse.json()
-                        if (checkData.success && checkData.hasPurchased) {
-                            setHasPurchased(true)
-                            setIsExpired(checkData.isExpired || false)
-                            setDaysRemaining(checkData.daysRemaining || null)
+            // Use requestAnimationFrame for better performance than setTimeout
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    const checkPurchase = async () => {
+                        try {
+                            const checkResponse = await fetch('/api/check-purchase', {
+                                method: 'GET',
+                                credentials: 'include',
+                            })
+                            const checkData = await checkResponse.json()
+                            if (checkData.success && checkData.hasPurchased) {
+                                setHasPurchased(true)
+                                setIsExpired(checkData.isExpired || false)
+                                setDaysRemaining(checkData.daysRemaining || null)
+                            }
+                        } catch (err) {
+                            console.error('Error refreshing purchase status:', err)
                         }
-                    } catch (err) {
-                        console.error('Error refreshing purchase status:', err)
                     }
-                }
-                checkPurchase()
-            }, 1000)
+                    checkPurchase()
+                }, 1000)
+            })
         } catch (err) {
             console.error('Download error:', err)
             alert(err.message || 'Failed to download PDF. Please try again.')
