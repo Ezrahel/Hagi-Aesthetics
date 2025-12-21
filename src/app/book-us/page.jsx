@@ -57,29 +57,66 @@ export default function BookUsPage() {
             }
             script.onload = () => {
                 try {
-                    // Wait a bit for Calendly to fully initialize
-                    setTimeout(() => {
+                    // Get Calendly URL from environment or use fallback
+                    const calendlyUrl = process.env.NEXT_PUBLIC_CALENDLY_URL || 'https://calendly.com/hagiaesthetics/30min'
+                    
+                    // Retry mechanism with increasing delays
+                    let retryCount = 0
+                    const maxRetries = 10
+                    const initialDelay = 200
+                    
+                    const tryInitialize = () => {
+                        if (retryCount >= maxRetries) {
+                            console.error('Calendly widget failed to initialize after multiple attempts')
+                            setError('Failed to load booking widget. Please check your Calendly URL configuration or refresh the page.')
+                            return
+                        }
+                        
                         if (typeof window !== 'undefined' && window.Calendly && calendlyContainerRef.current) {
-                            const calendlyUrl = process.env.NEXT_PUBLIC_CALENDLY_URL || 'https://calendly.com/hagiaesthetics/30min'
-                            
                             try {
+                                // Verify container is in DOM
+                                if (!document.body.contains(calendlyContainerRef.current)) {
+                                    setTimeout(tryInitialize, initialDelay * (retryCount + 1))
+                                    retryCount++
+                                    return
+                                }
+                                
                                 window.Calendly.initInlineWidget({
                                     url: calendlyUrl,
                                     parentElement: calendlyContainerRef.current,
                                     prefill: {},
                                     utm: {}
                                 })
+                                
+                                // Success - clear any error state
+                                setError(null)
                             } catch (initError) {
                                 console.error('Error initializing Calendly widget:', initError)
-                                setError('Failed to initialize booking widget. Please refresh the page.')
+                                // Retry on error
+                                retryCount++
+                                if (retryCount < maxRetries) {
+                                    setTimeout(tryInitialize, initialDelay * (retryCount + 1))
+                                } else {
+                                    setError('Failed to initialize booking widget. Please refresh the page.')
+                                }
                             }
                         } else {
-                            // Only log in development
-                            if (process.env.NODE_ENV === 'development') {
-                                console.warn('Calendly not available or container not ready')
+                            // Calendly not ready or container not mounted - retry
+                            retryCount++
+                            if (retryCount < maxRetries) {
+                                setTimeout(tryInitialize, initialDelay * (retryCount + 1))
+                            } else {
+                                // Only log in development
+                                if (process.env.NODE_ENV === 'development') {
+                                    console.warn('Calendly not available or container not ready after retries')
+                                }
+                                setError('Booking widget is taking longer than expected to load. Please refresh the page.')
                             }
                         }
-                    }, 100)
+                    }
+                    
+                    // Start initialization with initial delay
+                    setTimeout(tryInitialize, initialDelay)
                 } catch (error) {
                     console.error('Error in Calendly onload handler:', error)
                     setError('Failed to load booking widget. Please refresh the page.')
@@ -130,17 +167,30 @@ export default function BookUsPage() {
                     <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
                         {!mounted ? (
                             <div className="flex items-center justify-center min-h-[700px]">
-                                <p className="text-gray-500">Loading booking widget...</p>
+                                <div className="text-center">
+                                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink mx-auto mb-4"></div>
+                                    <p className="text-gray-500">Loading booking widget...</p>
+                                </div>
                             </div>
                         ) : error ? (
                             <div className="flex flex-col items-center justify-center min-h-[700px] p-8">
-                                <p className="text-red-600 mb-4">{error}</p>
-                                <button
-                                    onClick={() => window.location.reload()}
-                                    className="px-6 py-2 bg-pink text-white rounded-lg hover:bg-pink/90 transition-colors"
-                                >
-                                    Refresh Page
-                                </button>
+                                <p className="text-red-600 mb-4 text-center">{error}</p>
+                                <div className="flex gap-4">
+                                    <button
+                                        onClick={() => window.location.reload()}
+                                        className="px-6 py-2 bg-pink text-white rounded-lg hover:bg-pink/90 transition-colors"
+                                    >
+                                        Refresh Page
+                                    </button>
+                                    <a
+                                        href="https://calendly.com/hagiaesthetics/30min"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                                    >
+                                        Open in New Tab
+                                    </a>
+                                </div>
                             </div>
                         ) : (
                             <div 
