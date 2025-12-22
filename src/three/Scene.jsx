@@ -5,8 +5,15 @@ import * as THREE from 'three'
 const Scene = () => {
     return (
         <>
-            <div className='hidden lg:block w-full h-[60vh] lg:h-screen fixed top-0 overflow-visible'>
-                <Canvas >
+            <div className='w-full h-[60vh] lg:h-screen fixed top-0 overflow-visible z-0'>
+                <Canvas 
+                    gl={{ 
+                        antialias: true,
+                        alpha: true,
+                        powerPreference: "high-performance"
+                    }}
+                    dpr={[1, 2]} // Limit pixel ratio on mobile for better performance
+                >
                     <ambientLight />
                     <pointLight position={[10, 10, 10]} />
                     <Hand />

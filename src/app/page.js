@@ -8,7 +8,7 @@ import Banner from '@/components/Banner';
 // Dynamic imports for heavy components - loaded only when needed
 const Scene = dynamic(() => import('@/three/Scene'), { 
   ssr: false, 
-  loading: () => <div className='hidden lg:block w-full h-[60vh] lg:h-screen fixed top-0' />
+  loading: () => <div className='w-full h-[60vh] lg:h-screen fixed top-0 z-0' />
 });
 
 const Products = dynamic(() => import('@/components/Products'));
@@ -70,7 +70,7 @@ const Page = () => {
       <div className='w-full h-[100dvh] lg:h-[1600px] absolute top-0'>
         <Image src="/bgs/Home1.webp" alt="bg" width={1000} height={1000} className='w-full h-full object-cover lg:h-[1600px] relative lg:bottom-[300px]' />
       </div>
-      <div id="scrollarea" className='hidden lg:flex h-[2500px] lg:h-[5000px] bg-transparent  justify-center items-center' />
+      <div id="scrollarea" className='flex h-[2500px] lg:h-[5000px] bg-transparent justify-center items-center' />
       <Scene />
       <Products />
       <Whyus />
