@@ -1,5 +1,5 @@
 export const metadata = {
-    title: 'Book Us - Hagi Aesthetics',
+    title: 'Book - Hagi Aesthetics',
     description: 'Schedule a personalized consultation with Hagi Aesthetics. Choose a time that works best for you.',
 }
 

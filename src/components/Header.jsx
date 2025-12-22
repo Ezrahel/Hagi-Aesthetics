@@ -21,7 +21,7 @@ const Header = () => {
         { name: 'About us', path: '/aboutus' },
         { name: 'Faq', path: '/faq' },
         { name: 'Contact us', path: '/contactus' },
-        { name: 'Book Us', path: '/book-us' },
+        { name: 'Book', path: '/book-us' },
     ]
 
     // Memoize text color computation
