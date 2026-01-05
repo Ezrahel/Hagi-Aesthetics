@@ -1,87 +1,12 @@
 'use client'
-import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react'
-import Script from 'next/script'
+import React, { useEffect, useState } from 'react'
 
 export default function BookUsPage() {
-    const calendlyContainerRef = useRef(null)
-    const initTimeoutRef = useRef(null)
     const [mounted, setMounted] = useState(false)
-    const [error, setError] = useState(null)
-    const [useFallback, setUseFallback] = useState(false)
-    const [scriptReady, setScriptReady] = useState(false)
+    const [iframeError, setIframeError] = useState(false)
     
-    // Get Calendly URL from environment or use fallback
-    const calendlyUrl = useMemo(() => 
-        process.env.NEXT_PUBLIC_CALENDLY_URL || 'https://calendly.com/hagiaesthetics/30min',
-        []
-    )
-
-    // Optimized initialization function
-    const initializeWidget = useCallback(() => {
-        if (!scriptReady || !calendlyContainerRef.current) {
-            return false
-        }
-
-        try {
-            // Verify container is in DOM
-            if (!document.body.contains(calendlyContainerRef.current)) {
-                return false
-            }
-
-            if (typeof window !== 'undefined' && window.Calendly) {
-                window.Calendly.initInlineWidget({
-                    url: calendlyUrl,
-                    parentElement: calendlyContainerRef.current,
-                    prefill: {},
-                    utm: {}
-                })
-                setError(null)
-                setUseFallback(false)
-                return true
-            }
-        } catch (initError) {
-            if (process.env.NODE_ENV === 'development') {
-                console.warn('Error initializing Calendly widget:', initError)
-            }
-        }
-        return false
-    }, [scriptReady, calendlyUrl])
-
-    // Fast retry with shorter delays
-    useEffect(() => {
-        if (!mounted || !scriptReady) return
-
-        let retryCount = 0
-        const maxRetries = 5 // Reduced from 15
-        const initialDelay = 50 // Reduced from 300ms
-        const maxDelay = 200 // Cap at 200ms
-
-        const tryInit = () => {
-            if (retryCount >= maxRetries) {
-                // Fast fallback to iframe if widget doesn't initialize quickly
-                setUseFallback(true)
-                return
-            }
-
-            if (initializeWidget()) {
-                // Success!
-                return
-            }
-
-            retryCount++
-            const delay = Math.min(initialDelay * retryCount, maxDelay)
-            initTimeoutRef.current = setTimeout(tryInit, delay)
-        }
-
-        // Start immediately with minimal delay
-        initTimeoutRef.current = setTimeout(tryInit, 10)
-
-        return () => {
-            if (initTimeoutRef.current) {
-                clearTimeout(initTimeoutRef.current)
-            }
-        }
-    }, [mounted, scriptReady, initializeWidget])
+    // Zcal booking URL
+    const zcalUrl = 'https://zcal.co/hagiaesthetics'
 
     // Set mounted state immediately
     useEffect(() => {
@@ -90,76 +15,18 @@ export default function BookUsPage() {
         }
     }, [])
 
-    // Handle script load
-    const handleScriptLoad = useCallback(() => {
-        setScriptReady(true)
-    }, [])
-
-    // Handle script error - fast fallback
-    const handleScriptError = useCallback(() => {
-        setUseFallback(true)
-    }, [])
-
-    // Add resource hints for faster loading
-    useEffect(() => {
-        if (typeof document === 'undefined') return
-
-        // Preconnect to Calendly domains
-        const preconnect1 = document.createElement('link')
-        preconnect1.rel = 'preconnect'
-        preconnect1.href = 'https://assets.calendly.com'
-        document.head.appendChild(preconnect1)
-
-        const preconnect2 = document.createElement('link')
-        preconnect2.rel = 'preconnect'
-        preconnect2.href = 'https://calendly.com'
-        document.head.appendChild(preconnect2)
-
-        // DNS prefetch
-        const dns1 = document.createElement('link')
-        dns1.rel = 'dns-prefetch'
-        dns1.href = 'https://assets.calendly.com'
-        document.head.appendChild(dns1)
-
-        const dns2 = document.createElement('link')
-        dns2.rel = 'dns-prefetch'
-        dns2.href = 'https://calendly.com'
-        document.head.appendChild(dns2)
-
-        // Preload CSS for faster rendering
-        const cssLink = document.createElement('link')
-        cssLink.rel = 'stylesheet'
-        cssLink.href = 'https://assets.calendly.com/assets/external/widget.css'
-        cssLink.onerror = handleScriptError
-        document.head.appendChild(cssLink)
-    }, [handleScriptError])
+    // Handle iframe load error
+    const handleIframeError = () => {
+        setIframeError(true)
+    }
 
     return (
         <>
-            {/* Optimized: Use Next.js Script component for better loading */}
-            <Script
-                src="https://assets.calendly.com/assets/external/widget.js"
-                strategy="lazyOnload"
-                onLoad={handleScriptLoad}
-                onError={handleScriptError}
-            />
-
-            {/* Inline styles for immediate rendering */}
+            {/* Inline styles for Zcal iframe */}
             <style dangerouslySetInnerHTML={{__html: `
-                .calendly-inline-widget {
-                    width: 100% !important;
-                    height: 100% !important;
-                    min-height: 700px !important;
-                }
-                .calendly-inline-widget iframe {
-                    width: 100% !important;
-                    height: 100% !important;
-                    min-height: 700px !important;
-                    border: none !important;
-                }
-                .calendly-fallback-iframe {
+                .zcal-iframe {
                     width: 100%;
-                    height: 700px;
+                    height: 100%;
                     min-height: 700px;
                     border: none;
                 }
@@ -170,14 +37,61 @@ export default function BookUsPage() {
                     {/* Header Section */}
                     <div className="text-center mb-10">
                         <h1 className="font-astrid text-4xl lg:text-6xl text-pink mb-4">
-                            Book Your Consultation
+                            Book Appointment
                         </h1>
                         <p className="font-satoshi text-lg lg:text-xl text-gray-700 max-w-2xl mx-auto">
-                            Schedule a personalized consultation with our team. Choose a time that works best for you.
+                        Reserve a one-on-one facial appointment tailored to your skin&apos;s unique needs. Select a time that works best for you.
                         </p>
                     </div>
 
-                    {/* Calendly Widget Container */}
+                    {/* Services Cards Section */}
+                    <div className="mb-10">
+                        <h2 className="font-astrid text-2xl lg:text-3xl text-pink mb-6 text-center">
+                            Different Services
+                        </h2>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
+                            {/* Express Facial Card */}
+                            <div className="bg-[#F5E0FF] border-2 border-pink rounded-[16px] lg:rounded-[20px] p-5 lg:p-6 flex flex-col">
+                                <h3 className="font-satoshi font-black text-[16px] lg:text-[18px] uppercase text-pink mb-2">
+                                    Express Facial
+                                </h3>
+                                <p className="font-satoshi font-semibold text-[14px] lg:text-[16px] text-pink mb-3">
+                                    Time: 25 minutes
+                                </p>
+                                <p className="font-satoshi text-[14px] lg:text-[15px] text-gray-700 leading-relaxed">
+                                    Perfect for clients who want glowing skin. This quick treatment includes a deep cleanse, gentle exfoliation, and customized finishing products to instantly refresh and hydrate the skin. Ideal for maintenance in between full facials or before an event.
+                                </p>
+                            </div>
+
+                            {/* Signature / Basic Facial Card */}
+                            <div className="bg-[#F5E0FF] border-2 border-pink rounded-[16px] lg:rounded-[20px] p-5 lg:p-6 flex flex-col">
+                                <h3 className="font-satoshi font-black text-[16px] lg:text-[18px] uppercase text-pink mb-2">
+                                    Signature / Basic Facial
+                                </h3>
+                                <p className="font-satoshi font-semibold text-[14px] lg:text-[16px] text-pink mb-3">
+                                    Time: 60 minutes
+                                </p>
+                                <p className="font-satoshi text-[14px] lg:text-[15px] text-gray-700 leading-relaxed">
+                                    This is your go-to, fully customized facial designed to deeply cleanse, exfoliate, and nourish the skin. Includes cleansing, exfoliation, extractions (if needed), mask, facial massage, and targeted serums and moisturizers tailored to your skin type. Leaves the skin balanced, radiant, and refreshed.
+                                </p>
+                            </div>
+
+                            {/* Corrective Facial Card */}
+                            <div className="bg-[#F5E0FF] border-2 border-pink rounded-[16px] lg:rounded-[20px] p-5 lg:p-6 flex flex-col">
+                                <h3 className="font-satoshi font-black text-[16px] lg:text-[18px] uppercase text-pink mb-2">
+                                    Corrective Facial
+                                </h3>
+                                <p className="font-satoshi font-semibold text-[14px] lg:text-[16px] text-pink mb-3">
+                                    Time: 60 minutes
+                                </p>
+                                <p className="font-satoshi text-[14px] lg:text-[15px] text-gray-700 leading-relaxed">
+                                    A results-driven facial focused on correcting specific skin concerns such as acne, hyperpigmentation, uneven texture, congestion, or dullness. This advanced treatment may include deeper exfoliation, extended extractions, targeted treatments, masks, and corrective serums to improve overall skin health and clarity.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Zcal Widget Container */}
                     <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
                         {!mounted ? (
                             <div className="flex items-center justify-center min-h-[700px]">
@@ -186,18 +100,21 @@ export default function BookUsPage() {
                                     <p className="text-gray-500">Loading booking widget...</p>
                                 </div>
                             </div>
-                        ) : error ? (
+                        ) : iframeError ? (
                             <div className="flex flex-col items-center justify-center min-h-[700px] p-8">
-                                <p className="text-red-600 mb-4 text-center">{error}</p>
+                                <p className="text-red-600 mb-4 text-center">Unable to load booking widget. Please try again.</p>
                                 <div className="flex gap-4">
                                     <button
-                                        onClick={() => window.location.reload()}
+                                        onClick={() => {
+                                            setIframeError(false)
+                                            window.location.reload()
+                                        }}
                                         className="px-6 py-2 bg-pink text-white rounded-lg hover:bg-pink/90 transition-colors"
                                     >
                                         Refresh Page
                                     </button>
                                     <a
-                                        href={calendlyUrl}
+                                        href={zcalUrl}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
@@ -206,24 +123,15 @@ export default function BookUsPage() {
                                     </a>
                                 </div>
                             </div>
-                        ) : useFallback ? (
-                            // Fallback: Direct iframe embed (faster, no JS required)
-                            <iframe
-                                src={calendlyUrl}
-                                className="calendly-fallback-iframe w-full"
-                                frameBorder="0"
-                                title="Calendly Scheduling Page"
-                                loading="eager"
-                            />
                         ) : (
-                            <div 
-                                ref={calendlyContainerRef}
-                                className="calendly-inline-widget w-full"
-                                style={{ 
-                                    minHeight: '700px', 
-                                    height: '100%',
-                                    width: '100%',
-                                }}
+                            <iframe
+                                src={zcalUrl}
+                                className="zcal-iframe w-full"
+                                frameBorder="0"
+                                title="Zcal Scheduling Page"
+                                loading="lazy"
+                                onError={handleIframeError}
+                                allow="camera; microphone; geolocation"
                             />
                         )}
                     </div>
